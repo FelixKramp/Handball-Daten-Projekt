@@ -68,7 +68,7 @@ App.ui = (function () {
       </div>
       <div class="form-group">
         <label>Spielminute</label>
-        <input class="form-control" id="f-shot-minute" type="number" min="1" max="90" placeholder="30">
+        <input class="form-control" id="f-shot-minute" type="number" min="1" max="60" placeholder="30">
       </div>
       <div class="form-actions">
         <button class="btn btn-outline" id="btn-shot-cancel">Abbrechen</button>
