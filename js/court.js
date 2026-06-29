@@ -46,7 +46,9 @@ App.court = (function () {
     // Right side
     drawGoalSide(svg, GR, CY, GW, R6, R7, R9, LINE, FILL_6, false);
 
-    // Shot layer (shots rendered here)
+    // Opponent shot layer (below own shots)
+    svg.appendChild(ns('g', { id: 'opp-shot-layer' }));
+    // Own shot layer (on top)
     svg.appendChild(ns('g', { id: 'shot-layer' }));
 
     return svg;
@@ -140,6 +142,35 @@ App.court = (function () {
     });
   }
 
+  function renderOpponentShots(svg, shots) {
+    const layer = svg.querySelector('#opp-shot-layer');
+    if (!layer) return;
+    while (layer.firstChild) layer.removeChild(layer.firstChild);
+
+    shots.forEach(shot => {
+      const { x, y } = relativeToSVG(shot.rx, shot.ry);
+      const color = OUTCOME_COLOR[shot.outcome] || '#888';
+
+      const g = ns('g', { class: 'opp-shot-marker', 'data-id': shot.id });
+      // Dashed outer ring — visually distinct from own shots (solid)
+      g.appendChild(ns('circle', { cx: x, cy: y, r: 10, fill: 'none', stroke: color, 'stroke-width': 1.5, opacity: 0.55, 'stroke-dasharray': '3,3' }));
+      // Diamond inner (rotated square)
+      g.appendChild(ns('rect', { x: x - 4.5, y: y - 4.5, width: 9, height: 9, fill: color, transform: `rotate(45 ${x} ${y})` }));
+
+      if (shot.opponentPlayer) {
+        const label = ns('text', {
+          x, y: y - 15, 'text-anchor': 'middle',
+          fill: color, 'font-size': 8, 'font-weight': '700',
+          'font-family': '-apple-system, sans-serif'
+        });
+        label.textContent = String(shot.opponentPlayer).substring(0, 5);
+        g.appendChild(label);
+      }
+
+      layer.appendChild(g);
+    });
+  }
+
   function enableEntry(svg, callback) {
     svg.classList.add('mode-entry');
     function handler(e) {
@@ -152,5 +183,5 @@ App.court = (function () {
     svg.addEventListener('click', handler);
   }
 
-  return { build, renderShots, enableEntry, OUTCOME_COLOR };
+  return { build, renderShots, renderOpponentShots, enableEntry, OUTCOME_COLOR, svgToRelative };
 })();

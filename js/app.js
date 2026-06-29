@@ -91,6 +91,7 @@ App.ui = (function () {
   // ── Router ────────────────────────────────────────────────────────
   const views = {
     dashboard: { title: 'Dashboard',     render: App.views.renderDashboard },
+    live:      { title: 'Spielmodus',    render: App.views.renderLive },
     squad:     { title: 'Kader',          render: App.views.renderSquad },
     analysis:  { title: 'Spielanalyse',   render: App.views.renderAnalysis },
     schedule:  { title: 'Spielplan',      render: App.views.renderSchedule },
@@ -283,6 +284,9 @@ App.ui = (function () {
   });
 
   // ── Init ──────────────────────────────────────────────────────────
+  // Persist timer state across view navigation
+  App.live = App.live || { timerSeconds: 0, timerRunning: false, timerHalf: 1, timerInterval: null };
+
   function init() {
     const team = App.data.getTeam();
     teamNameEl.textContent = team.name;
