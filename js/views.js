@@ -636,7 +636,11 @@ App.views = (function () {
           <div class="live-score-wrap">
             <div class="live-score-side">
               <div class="live-score-label">Wir</div>
-              <div class="live-score-num live-score-own" id="live-score-own">0</div>
+              <div class="live-opp-row">
+                <button class="live-adj-btn" id="live-own-minus">−</button>
+                <div class="live-score-num live-score-own" id="live-score-own">0</div>
+                <button class="live-adj-btn" id="live-own-plus">+</button>
+              </div>
             </div>
             <div class="live-score-sep">:</div>
             <div class="live-score-side">
@@ -655,10 +659,6 @@ App.views = (function () {
             <button class="live-ctrl-btn live-ctrl-play" id="live-timer-toggle" title="Start / Pause">▶</button>
             <button class="live-ctrl-btn live-ctrl-half" id="live-hz-toggle" title="2. Halbzeit starten">2. HZ</button>
           </div>
-        </div>
-
-        <div class="live-action-wrap">
-          <button class="live-shot-btn" id="live-btn-shot">⚡ Eigener Wurf</button>
         </div>
 
         <div id="live-recent-wrap" class="live-recent-wrap">
@@ -780,7 +780,20 @@ App.views = (function () {
       refreshScore();
     });
 
-    // "+" opens defense modal; counter updated when goal is confirmed
+    // Wir + → attack modal · Wir − → letztes Tor rückgängig
+    document.getElementById('live-own-plus').addEventListener('click', () => {
+      openAttackModal(currentGameId, currentMinute());
+    });
+    document.getElementById('live-own-minus').addEventListener('click', () => {
+      const goals = App.data.getShots(currentGameId).filter(s => s.outcome === 'goal');
+      if (goals.length === 0) return;
+      App.data.deleteShot(goals[goals.length - 1].id);
+      refreshScore();
+      refreshRecent();
+      App.ui.toast('Letztes Tor rückgängig', 'inf');
+    });
+
+    // Gegner + → defense modal; Zähler steigt nur bei gespeichertem Tor
     document.getElementById('live-opp-plus').addEventListener('click', () => {
       openDefenseModal(currentGameId, currentMinute());
     });
@@ -790,11 +803,6 @@ App.views = (function () {
       currentGameId = parseInt(this.value);
       refreshScore();
       refreshRecent();
-    });
-
-    // ── Own shot button ────────────────────────────────────────────
-    document.getElementById('live-btn-shot').addEventListener('click', () => {
-      openAttackModal(currentGameId, currentMinute());
     });
 
     // ── Attack modal ───────────────────────────────────────────────
@@ -887,10 +895,11 @@ App.views = (function () {
       }, 0);
     }
 
-    // ── Defense modal ──────────────────────────────────────────────
+    // ── Defense modal (with opponent roster) ──────────────────────
     function openDefenseModal(gameId, autoMinute) {
-      let selectedOutcome = null;
-      let selectedZone    = null;
+      let selectedOutcome   = null;
+      let selectedZone      = null;
+      let selectedOppPlayer = null;
 
       const ZONES = [
         { id:'tl', label:'OL' }, { id:'tm', label:'OM' }, { id:'tr', label:'OR' },
@@ -900,8 +909,14 @@ App.views = (function () {
 
       const html = `
         <div class="form-group">
-          <label>Gegner-Spieler (optional)</label>
-          <input class="form-control" id="lm-opp-player" placeholder="Nummer oder Name" maxlength="20">
+          <label>Gegner-Spieler</label>
+          <div id="opp-player-wrap">
+            <div class="opp-roster-row" id="opp-roster-chips"></div>
+            <div class="opp-add-row" id="opp-add-row" style="display:none">
+              <input class="form-control" id="opp-new-player" placeholder="Nr. oder Name" maxlength="20" style="flex:1">
+              <button class="btn btn-primary btn-sm" id="btn-add-confirm">OK</button>
+            </div>
+          </div>
         </div>
         <div class="form-group">
           <label>Ergebnis</label>
@@ -930,6 +945,39 @@ App.views = (function () {
       App.ui.openModal('Gegner-Wurf eintragen', html);
 
       setTimeout(() => {
+        function buildRosterChips() {
+          const roster = App.data.getOpponentRoster(gameId);
+          const chips = document.getElementById('opp-roster-chips');
+          if (!chips) return;
+          chips.innerHTML = roster.map((name, i) =>
+            `<button class="opp-roster-btn${selectedOppPlayer === name ? ' selected' : ''}" data-name="${name}" data-idx="${i}">${name}</button>`
+          ).join('') + '<button class="opp-roster-add" id="btn-opp-add">+ Hinzufügen</button>';
+        }
+        buildRosterChips();
+
+        // Player select + add button via delegation on stable wrapper
+        document.getElementById('opp-player-wrap').addEventListener('click', e => {
+          if (e.target.id === 'btn-opp-add') {
+            document.getElementById('opp-add-row').style.display = 'flex';
+            document.getElementById('opp-new-player')?.focus();
+            return;
+          }
+          const btn = e.target.closest('.opp-roster-btn');
+          if (btn) {
+            selectedOppPlayer = selectedOppPlayer === btn.dataset.name ? null : btn.dataset.name;
+            buildRosterChips();
+          }
+        });
+
+        document.getElementById('btn-add-confirm')?.addEventListener('click', () => {
+          const name = document.getElementById('opp-new-player')?.value.trim();
+          if (!name) return;
+          App.data.addOpponentPlayer(gameId, name);
+          document.getElementById('opp-new-player').value = '';
+          document.getElementById('opp-add-row').style.display = 'none';
+          buildRosterChips();
+        });
+
         document.querySelectorAll('.outcome-btn').forEach(btn => {
           btn.addEventListener('click', () => {
             selectedOutcome = btn.dataset.oc;
@@ -948,9 +996,8 @@ App.views = (function () {
 
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
-          const oppPlayer = document.getElementById('lm-opp-player')?.value.trim() || null;
-          const minute    = parseInt(document.getElementById('lm-minute')?.value) || null;
-          App.data.addOpponentShot({ gameId, opponentPlayer: oppPlayer, outcome: selectedOutcome, minute, rx: 0.25, ry: 0.5, goalZone: selectedZone });
+          const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
+          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, rx: 0.25, ry: 0.5, goalZone: selectedZone });
           if (selectedOutcome === 'goal') {
             App.data.setLiveGoalsAgainst(gameId, App.data.getLiveGoalsAgainst(gameId) + 1);
           }

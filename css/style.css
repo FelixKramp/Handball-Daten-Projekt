@@ -884,6 +884,45 @@ select.form-control { cursor: pointer; }
 }
 .ri-del:hover { background: var(--accent-dim); color: var(--accent); }
 
+/* Opponent roster in defense modal */
+.opp-roster-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.opp-roster-btn {
+  padding: 7px 13px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.opp-roster-btn:hover { background: var(--surface-3); color: var(--text-1); }
+.opp-roster-btn.selected { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+.opp-roster-add {
+  padding: 7px 13px;
+  border-radius: 20px;
+  border: 1.5px dashed var(--border-2);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.opp-roster-add:hover { color: var(--text-1); border-color: var(--text-2); }
+.opp-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
 /* Zone picker buttons inside attack modal */
 .zone-btn-grid {
   display: flex;
