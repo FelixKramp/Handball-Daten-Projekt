@@ -782,6 +782,129 @@ select.form-control { cursor: pointer; }
 .hot-name { font-size: 16px; font-weight: 700; }
 .hot-sub  { font-size: 12px; color: var(--text-2); margin-top: 2px; }
 
+/* ============================================================
+   Wurfzonen (Court-Overlay)
+   ============================================================ */
+.zone-pill {
+  display: inline-block;
+  background: var(--green-dim);
+  color: var(--green);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+.zone-pill.opp { background: var(--accent-dim); color: var(--accent); }
+
+.zone-chip { cursor: pointer; }
+.zone-chip-bg {
+  fill: rgba(63,185,104,0.18);
+  stroke: rgba(63,185,104,0.7);
+  stroke-width: 1.5;
+  transition: fill 0.12s;
+}
+.zone-chip:hover .zone-chip-bg,
+.zone-chip:active .zone-chip-bg { fill: rgba(63,185,104,0.42); }
+.zone-chip.opp .zone-chip-bg {
+  fill: rgba(232,72,85,0.18);
+  stroke: rgba(232,72,85,0.7);
+}
+.zone-chip.opp:hover .zone-chip-bg,
+.zone-chip.opp:active .zone-chip-bg { fill: rgba(232,72,85,0.42); }
+.zone-chip-label {
+  fill: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, sans-serif;
+  pointer-events: none;
+}
+
+/* ============================================================
+   Live — Action button + Recent entries
+   ============================================================ */
+.live-action-wrap {
+  padding: 16px 16px 8px;
+}
+.live-shot-btn {
+  width: 100%;
+  padding: 18px;
+  font-size: 18px;
+  font-weight: 800;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--green);
+  color: #fff;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.live-shot-btn:active { opacity: 0.85; transform: scale(0.98); }
+
+.live-recent-wrap { padding: 8px 16px 16px; }
+.live-recent-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.live-recent-empty {
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+  padding: 16px 0;
+}
+.live-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+}
+.ri-icon { font-size: 14px; flex-shrink: 0; }
+.ri-own  { color: var(--green); }
+.ri-opp  { color: var(--accent); }
+.ri-text { font-size: 13px; flex: 1; color: var(--text-1); }
+.ri-del  {
+  flex-shrink: 0;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.ri-del:hover { background: var(--accent-dim); color: var(--accent); }
+
+/* Zone picker buttons inside attack modal */
+.zone-btn-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.zone-pick-btn {
+  padding: 7px 13px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.zone-pick-btn:hover { background: var(--surface-3); color: var(--text-1); }
+.zone-pick-btn.selected { background: var(--green-dim); color: var(--green); border-color: var(--green); }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
