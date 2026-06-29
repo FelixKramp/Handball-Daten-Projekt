@@ -183,5 +183,48 @@ App.court = (function () {
     svg.addEventListener('click', handler);
   }
 
-  return { build, renderShots, renderOpponentShots, enableEntry, OUTCOME_COLOR, svgToRelative };
+  // Goal front-view 3×3 heatmap for goalkeeper analysis.
+  // zoneStats = { zones: {tl,tm,...}, total }. Redder = more goals conceded there.
+  function buildGoalZoneGrid(zoneStats) {
+    const GZ_VW = 300, GZ_VH = 200;
+    const PAD = 14;
+    const W = GZ_VW - PAD * 2, H = GZ_VH - PAD * 2;
+    const cw = W / 3, ch = H / 3;
+    const order = ['tl','tm','tr','ml','mm','mr','bl','bm','br'];
+
+    const svg = ns('svg', { viewBox: `0 0 ${GZ_VW} ${GZ_VH}`, class: 'goalzone-svg', xmlns: 'http://www.w3.org/2000/svg' });
+
+    // Goal frame backdrop
+    svg.appendChild(ns('rect', { x: PAD - 4, y: PAD - 4, width: W + 8, height: H + 8, fill: '#0d1d30', stroke: '#4a7fc1', 'stroke-width': 3, rx: 2 }));
+
+    const max = Math.max(1, ...order.map(z => zoneStats.zones[z] || 0));
+
+    order.forEach((zone, i) => {
+      const col = i % 3, row = Math.floor(i / 3);
+      const x = PAD + col * cw, y = PAD + row * ch;
+      const count = zoneStats.zones[zone] || 0;
+      const intensity = count / max; // 0..1
+      // Heat fill: transparent → accent red
+      const fill = count > 0 ? `rgba(232,72,85,${0.12 + intensity * 0.68})` : 'rgba(255,255,255,0.02)';
+
+      svg.appendChild(ns('rect', {
+        x: x + 1.5, y: y + 1.5, width: cw - 3, height: ch - 3,
+        fill, stroke: 'rgba(74,127,193,0.4)', 'stroke-width': 1, rx: 3
+      }));
+
+      if (count > 0) {
+        const label = ns('text', {
+          x: x + cw / 2, y: y + ch / 2 + 6, 'text-anchor': 'middle',
+          fill: '#fff', 'font-size': 18, 'font-weight': '800',
+          'font-family': '-apple-system, sans-serif'
+        });
+        label.textContent = count;
+        svg.appendChild(label);
+      }
+    });
+
+    return svg;
+  }
+
+  return { build, renderShots, renderOpponentShots, enableEntry, buildGoalZoneGrid, OUTCOME_COLOR, svgToRelative };
 })();

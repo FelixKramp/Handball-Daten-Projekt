@@ -199,6 +199,69 @@ App.data = (function () {
       };
     },
 
+    // ── Analyse: Torzonen / Momentum ──────────────────────
+    // Goal-zone tally for goalkeeper analysis.
+    // side: 'own' counts our shots, 'opp' counts opponent shots. Only goals are counted.
+    getGoalZoneStats(gameId, side = 'opp') {
+      const shots = side === 'own' ? this.getShots(gameId) : this.getOpponentShots(gameId);
+      const zones = { tl:0, tm:0, tr:0, ml:0, mm:0, mr:0, bl:0, bm:0, br:0 };
+      let withZone = 0;
+      shots.filter(s => s.outcome === 'goal' && s.goalZone).forEach(s => {
+        if (zones[s.goalZone] != null) { zones[s.goalZone]++; withZone++; }
+      });
+      return { zones, total: withZone };
+    },
+
+    // Minute-by-minute momentum timeline: cumulative goals for both sides + running diff.
+    getMomentumData(gameId) {
+      const goals = this._goalTimeline(gameId);
+      let own = 0, opp = 0;
+      return goals.map(g => {
+        if (g.side === 'own') own++; else opp++;
+        return { minute: g.minute, own, opp, diff: own - opp };
+      });
+    },
+
+    // Current scoring run: consecutive goals by one side at the end. { side, count }.
+    getCurrentRun(gameId) {
+      const goals = this._goalTimeline(gameId);
+      if (goals.length === 0) return { side: null, count: 0 };
+      const lastSide = goals[goals.length - 1].side;
+      let count = 0;
+      for (let i = goals.length - 1; i >= 0; i--) {
+        if (goals[i].side === lastSide) count++; else break;
+      }
+      return { side: lastSide, count };
+    },
+
+    // Hottest own player by goals within the last `windowMin` minutes of recorded play.
+    getHotPlayer(gameId, windowMin = 10) {
+      const shots = this.getShots(gameId).filter(s => s.outcome === 'goal' && s.minute != null);
+      if (shots.length === 0) return null;
+      const maxMinute = Math.max(...shots.map(s => s.minute));
+      const from = maxMinute - windowMin;
+      const tally = {};
+      shots.filter(s => s.minute >= from).forEach(s => {
+        if (s.playerId != null) tally[s.playerId] = (tally[s.playerId] || 0) + 1;
+      });
+      const topId = Object.keys(tally).sort((a, b) => tally[b] - tally[a])[0];
+      if (!topId) return null;
+      const player = state.players.find(p => p.id == topId);
+      return player ? { player, goals: tally[topId], windowMin, from: Math.max(1, from), to: maxMinute } : null;
+    },
+
+    // Merged, minute-sorted list of all scored goals in a game. [{ minute, side }]
+    _goalTimeline(gameId) {
+      const goals = [];
+      this.getShots(gameId)
+        .filter(s => s.outcome === 'goal' && s.minute != null)
+        .forEach(s => goals.push({ minute: s.minute, side: 'own' }));
+      this.getOpponentShots(gameId)
+        .filter(s => s.outcome === 'goal' && s.minute != null)
+        .forEach(s => goals.push({ minute: s.minute, side: 'opp' }));
+      return goals.sort((a, b) => a.minute - b.minute);
+    },
+
     // ── Live Score ────────────────────────────────────────
     getLiveGoalsAgainst(gameId) {
       const g = state.games.find(g => g.id === gameId);

@@ -225,8 +225,7 @@ App.views = (function () {
   // ── Spielanalyse ─────────────────────────────────────────────────
 
   function renderAnalysis(el) {
-    const games   = App.data.getGames().filter(g => g.played);
-    const players = App.data.getPlayers();
+    const games = App.data.getGames().filter(g => g.played);
 
     if (games.length === 0) {
       el.innerHTML = `<div class="empty"><h3>Keine gespielten Spiele</h3>
@@ -234,25 +233,41 @@ App.views = (function () {
       return;
     }
 
-    const firstGame = games[0];
+    let activeGameId = games[0].id;
+    let mode = 'own'; // 'own' | 'opp' | 'momentum'
 
     el.innerHTML = `
       <div class="section">
+        <div class="court-controls" style="margin-bottom:16px;">
+          <select class="form-control" id="analysis-game-select" style="max-width:260px;">
+            ${games.map(g => `<option value="${g.id}">${dateFmt(g.date)} – ${g.opponent} (${g.goalsFor}:${g.goalsAgainst})</option>`).join('')}
+          </select>
+          <div class="seg-control" id="analysis-mode">
+            <button class="seg-btn active" data-mode="own">Eigene Würfe</button>
+            <button class="seg-btn" data-mode="opp">Gegner-Würfe</button>
+            <button class="seg-btn" data-mode="momentum">Momentum</button>
+          </div>
+        </div>
+        <div id="analysis-body"></div>
+      </div>
+    `;
+
+    const body = document.getElementById('analysis-body');
+
+    // ── Shot chart (own or opponent) ─────────────────────────────────
+    function renderShotChart(side) {
+      const isOwn = side === 'own';
+      body.innerHTML = `
         <div class="court-wrap">
           <div class="court-controls">
-            <select class="form-control" id="analysis-game-select" style="max-width:260px;">
-              ${games.map(g => `<option value="${g.id}">${dateFmt(g.date)} – ${g.opponent} (${g.goalsFor}:${g.goalsAgainst})</option>`).join('')}
-            </select>
             <button class="btn btn-primary" id="btn-add-shot">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
-              Wurf eintragen
+              ${isOwn ? 'Wurf eintragen' : 'Gegner-Wurf eintragen'}
             </button>
             <button class="btn btn-outline" id="btn-clear-shots">Alle löschen</button>
             <div id="entry-hint" style="font-size:12px;color:var(--text-2);display:none;">Auf das Spielfeld klicken → Wurfposition wählen</div>
           </div>
-
           <div id="court-container"></div>
-
           <div class="shot-legend mt-10">
             <div class="legend-item"><div class="legend-dot" style="background:#3fb968"></div>Tor</div>
             <div class="legend-item"><div class="legend-dot" style="background:#e84855"></div>Fehlschuss</div>
@@ -260,127 +275,224 @@ App.views = (function () {
             <div class="legend-item"><div class="legend-dot" style="background:#4a90d9"></div>Pfosten</div>
           </div>
         </div>
-      </div>
-
-      <div class="section">
-        <div class="grid-2">
-          <div class="card">
-            <div class="card-title">Wurfstatistik</div>
-            <div id="shot-stats-content"></div>
+        <div class="section" style="margin-top:24px;">
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">Wurfstatistik${isOwn ? '' : ' (Gegner)'}</div>
+              <div id="shot-stats-content"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">${isOwn ? 'Tore nach Spieler' : 'Torzonen — wo wir kassieren'}</div>
+              <div id="secondary-panel"></div>
+            </div>
           </div>
-          <div class="card">
-            <div class="card-title">Tore nach Spieler</div>
-            <div class="chart-wrap" id="player-goals-wrap"><canvas id="player-goals-chart"></canvas></div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    let courtSvg = App.court.build();
-    document.getElementById('court-container').appendChild(courtSvg);
-
-    let activeGameId = firstGame.id;
-    let entryMode = false;
-
-    function refreshCourt() {
-      const shots   = App.data.getShots(activeGameId);
-      const players = App.data.getPlayers();
-      App.court.renderShots(courtSvg, shots, players);
-      renderShotStats(activeGameId);
-    }
-
-    function renderShotStats(gameId) {
-      const s = App.data.getShotStats(gameId);
-      const pct = s.total > 0 ? Math.round(s.goals / s.total * 100) : 0;
-      document.getElementById('shot-stats-content').innerHTML = `
-        <div class="stat-row" style="margin-bottom:16px;">
-          <div class="stat-col"><span class="v">${s.total}</span><span class="l">Würfe</span></div>
-          <div class="stat-col"><span class="v text-green">${s.goals}</span><span class="l">Tore</span></div>
-          <div class="stat-col"><span class="v">${pct}%</span><span class="l">Wurfquote</span></div>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <span class="badge" style="background:rgba(232,72,85,0.15);color:#e84855;">${s.misses} Fehlschüsse</span>
-          <span class="badge" style="background:rgba(240,165,0,0.15);color:#f0a500;">${s.blocks} Geblockt</span>
-          <span class="badge" style="background:rgba(74,144,217,0.15);color:#4a90d9;">${s.posts} Pfosten</span>
         </div>
       `;
 
-      // Player goals chart
-      const allShots = App.data.getShots(gameId);
-      const pGoals = {};
-      allShots.filter(s => s.outcome === 'goal').forEach(s => {
-        pGoals[s.playerId] = (pGoals[s.playerId] || 0) + 1;
-      });
-      const players = App.data.getPlayers();
-      const chartData = Object.entries(pGoals)
-        .map(([id, g]) => ({ player: players.find(p => p.id == id), goals: g }))
-        .filter(d => d.player)
-        .sort((a, b) => b.goals - a.goals);
+      const courtSvg = App.court.build();
+      document.getElementById('court-container').appendChild(courtSvg);
 
-      const wrap = document.getElementById('player-goals-wrap');
-      if (wrap) {
-        // Always reset to fresh canvas to avoid stale Chart.js instances
-        wrap.innerHTML = chartData.length > 0
-          ? '<canvas id="player-goals-chart"></canvas>'
-          : '<div class="text-muted" style="padding:20px;text-align:center">Noch keine Tore erfasst</div>';
-        if (chartData.length > 0) {
-          new Chart(document.getElementById('player-goals-chart').getContext('2d'), {
-            type: 'bar',
-            data: {
-              labels: chartData.map(d => `#${d.player.number} ${d.player.name.split(' ')[0]}`),
-              datasets: [{ data: chartData.map(d => d.goals), backgroundColor: 'rgba(63,185,104,0.7)', borderRadius: 4, label: 'Tore' }]
-            },
-            options: {
-              responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-              plugins: { legend: { display: false } },
-              scales: {
-                x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { display: false } }
-              }
-            }
-          });
+      let entryMode = false;
+
+      function refresh() {
+        if (isOwn) {
+          App.court.renderShots(courtSvg, App.data.getShots(activeGameId), App.data.getPlayers());
+        } else {
+          App.court.renderShots(courtSvg, [], []);
+          App.court.renderOpponentShots(courtSvg, App.data.getOpponentShots(activeGameId));
         }
+        renderStats();
+        renderSecondary();
+      }
+
+      function renderStats() {
+        const s = isOwn ? App.data.getShotStats(activeGameId) : App.data.getOpponentShotStats(activeGameId);
+        const pct = s.total > 0 ? Math.round(s.goals / s.total * 100) : 0;
+        document.getElementById('shot-stats-content').innerHTML = `
+          <div class="stat-row" style="margin-bottom:16px;">
+            <div class="stat-col"><span class="v">${s.total}</span><span class="l">Würfe</span></div>
+            <div class="stat-col"><span class="v ${isOwn ? 'text-green' : 'text-red'}">${s.goals}</span><span class="l">Tore</span></div>
+            <div class="stat-col"><span class="v">${pct}%</span><span class="l">Quote</span></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <span class="badge" style="background:rgba(232,72,85,0.15);color:#e84855;">${s.misses} Fehlschüsse</span>
+            <span class="badge" style="background:rgba(240,165,0,0.15);color:#f0a500;">${s.blocks} Geblockt</span>
+            <span class="badge" style="background:rgba(74,144,217,0.15);color:#4a90d9;">${s.posts} Pfosten</span>
+          </div>
+        `;
+      }
+
+      function renderSecondary() {
+        const host = document.getElementById('secondary-panel');
+        if (isOwn) {
+          // Player goals chart
+          const pGoals = {};
+          App.data.getShots(activeGameId).filter(s => s.outcome === 'goal').forEach(s => {
+            pGoals[s.playerId] = (pGoals[s.playerId] || 0) + 1;
+          });
+          const players = App.data.getPlayers();
+          const chartData = Object.entries(pGoals)
+            .map(([id, g]) => ({ player: players.find(p => p.id == id), goals: g }))
+            .filter(d => d.player)
+            .sort((a, b) => b.goals - a.goals);
+
+          host.className = 'chart-wrap';
+          host.innerHTML = chartData.length > 0
+            ? '<canvas id="player-goals-chart"></canvas>'
+            : '<div class="text-muted" style="padding:20px;text-align:center">Noch keine Tore erfasst</div>';
+          if (chartData.length > 0) {
+            new Chart(document.getElementById('player-goals-chart').getContext('2d'), {
+              type: 'bar',
+              data: {
+                labels: chartData.map(d => `#${d.player.number} ${d.player.name.split(' ')[0]}`),
+                datasets: [{ data: chartData.map(d => d.goals), backgroundColor: 'rgba(63,185,104,0.7)', borderRadius: 4, label: 'Tore' }]
+              },
+              options: {
+                responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                  y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { display: false } }
+                }
+              }
+            });
+          }
+        } else {
+          // Goal-zone heatmap (goalkeeper analysis)
+          const gz = App.data.getGoalZoneStats(activeGameId, 'opp');
+          host.className = '';
+          if (gz.total === 0) {
+            host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine Gegner-Tore mit Torzone erfasst.<br>Trage Gegner-Würfe mit Torzone ein (Spielmodus → Abwehr).</div>';
+          } else {
+            host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm" style="text-align:center;margin-top:8px">Aus Sicht des Torwarts · Zahl = kassierte Tore</div>';
+            host.querySelector('.goalzone-host').appendChild(App.court.buildGoalZoneGrid(gz));
+          }
+        }
+      }
+
+      refresh();
+
+      // Entry
+      document.getElementById('btn-add-shot').addEventListener('click', function () {
+        if (entryMode) return;
+        entryMode = true;
+        this.textContent = '…klicke auf das Feld';
+        this.disabled = true;
+        document.getElementById('entry-hint').style.display = 'block';
+
+        App.court.enableEntry(courtSvg, function ({ rx, ry }) {
+          entryMode = false;
+          const btn = document.getElementById('btn-add-shot');
+          if (btn) { btn.textContent = isOwn ? 'Wurf eintragen' : 'Gegner-Wurf eintragen'; btn.disabled = false; }
+          const hint = document.getElementById('entry-hint');
+          if (hint) hint.style.display = 'none';
+
+          if (isOwn) {
+            App.ui.openShotModal({ rx, ry, gameId: activeGameId }, refresh);
+          } else {
+            App.ui.openOpponentShotModal({ rx, ry, gameId: activeGameId }, refresh);
+          }
+        });
+      });
+
+      // Clear
+      document.getElementById('btn-clear-shots').addEventListener('click', function () {
+        const shots = isOwn ? App.data.getShots(activeGameId) : App.data.getOpponentShots(activeGameId);
+        if (shots.length === 0) return;
+        if (!confirm(`Alle ${shots.length} ${isOwn ? '' : 'Gegner-'}Würfe für dieses Spiel löschen?`)) return;
+        shots.forEach(s => isOwn ? App.data.deleteShot(s.id) : App.data.deleteOpponentShot(s.id));
+        refresh();
+        App.ui.toast('Würfe gelöscht', 'ok');
+      });
+    }
+
+    // ── Momentum ─────────────────────────────────────────────────────
+    function renderMomentum() {
+      const m   = App.data.getMomentumData(activeGameId);
+      const run = App.data.getCurrentRun(activeGameId);
+      const hot = App.data.getHotPlayer(activeGameId, 10);
+
+      let runHtml;
+      if (run.side === null) {
+        runHtml = '<div class="text-muted">Noch keine Tore mit Minute erfasst</div>';
+      } else if (run.count < 2) {
+        runHtml = '<div class="text-muted">Aktuell kein Lauf — letzter Treffer wechselseitig</div>';
+      } else {
+        const own = run.side === 'own';
+        runHtml = `<div class="run-indicator ${own ? 'run-own' : 'run-opp'}">
+          ${own ? '🔥' : '⚠️'} ${own ? 'Ihr seid' : 'Gegner ist'} auf einem <strong>${run.count}:0-Lauf</strong>
+        </div>`;
+      }
+
+      const hotHtml = hot
+        ? `<div class="hot-player">
+             <div class="hot-flame">🔥</div>
+             <div>
+               <div class="hot-name">#${hot.player.number} ${hot.player.name}</div>
+               <div class="hot-sub">${hot.goals} ${hot.goals === 1 ? 'Tor' : 'Tore'} zwischen Min. ${hot.from} und ${hot.to}</div>
+             </div>
+           </div>`
+        : '<div class="text-muted">Noch keine Spielerdaten in den letzten 10 Minuten</div>';
+
+      body.innerHTML = `
+        <div class="card">
+          <div class="card-title">Momentum — Tordifferenz im Spielverlauf</div>
+          ${m.length === 0
+            ? '<div class="text-muted" style="padding:30px;text-align:center">Noch keine Tore mit Spielminute erfasst.<br>Trage im Spielmodus Würfe mit Minute ein, dann erscheint hier die Verlaufskurve.</div>'
+            : '<div class="chart-wrap" style="height:260px"><canvas id="momentum-chart"></canvas></div><div class="text-muted text-sm" style="text-align:center;margin-top:6px">Kurve steigt → euer Lauf · Kurve fällt → Gegner drückt</div>'}
+        </div>
+        <div class="section" style="margin-top:24px;">
+          <div class="grid-2">
+            <div class="card"><div class="card-title">Aktueller Lauf</div>${runHtml}</div>
+            <div class="card"><div class="card-title">Heißester Spieler (letzte 10 Min.)</div>${hotHtml}</div>
+          </div>
+        </div>
+      `;
+
+      if (m.length > 0) {
+        const labels = ['0\'', ...m.map(d => d.minute + '\'')];
+        const data   = [0, ...m.map(d => d.diff)];
+        new Chart(document.getElementById('momentum-chart').getContext('2d'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              data, label: 'Differenz (wir − Gegner)',
+              borderColor: '#3fb968', borderWidth: 2,
+              backgroundColor: 'rgba(63,185,104,0.12)', fill: 'origin',
+              tension: 0.25, pointRadius: 3, pointBackgroundColor: '#3fb968'
+            }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+              y: { ticks: { color: '#8b949e', font: { size: 11 }, stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.06)' } }
+            }
+          }
+        });
       }
     }
 
-    refreshCourt();
+    function render() {
+      if (mode === 'momentum') renderMomentum();
+      else renderShotChart(mode);
+    }
 
-    // Game selector
+    render();
+
     document.getElementById('analysis-game-select').addEventListener('change', function () {
       activeGameId = parseInt(this.value);
-      refreshCourt();
+      render();
     });
 
-    // Add shot button → entry mode (one-shot: mode resets as soon as field is clicked)
-    document.getElementById('btn-add-shot').addEventListener('click', function () {
-      if (entryMode) return;
-      entryMode = true;
-      this.textContent = '…klicke auf das Feld';
-      this.disabled = true;
-      document.getElementById('entry-hint').style.display = 'block';
-
-      App.court.enableEntry(courtSvg, function ({ rx, ry }) {
-        // Reset button immediately on field click (before modal opens)
-        entryMode = false;
-        const btn = document.getElementById('btn-add-shot');
-        if (btn) { btn.textContent = 'Wurf eintragen'; btn.disabled = false; }
-        const hint = document.getElementById('entry-hint');
-        if (hint) hint.style.display = 'none';
-
-        App.ui.openShotModal({ rx, ry, gameId: activeGameId }, function () {
-          refreshCourt();
-        });
-      });
-    });
-
-    // Clear shots
-    document.getElementById('btn-clear-shots').addEventListener('click', function () {
-      const shots = App.data.getShots(activeGameId);
-      if (shots.length === 0) return;
-      if (!confirm(`Alle ${shots.length} Würfe für dieses Spiel löschen?`)) return;
-      shots.forEach(s => App.data.deleteShot(s.id));
-      refreshCourt();
-      App.ui.toast('Würfe gelöscht', 'ok');
+    document.getElementById('analysis-mode').addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-mode]');
+      if (!btn || btn.dataset.mode === mode) return;
+      mode = btn.dataset.mode;
+      this.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+      render();
     });
   }
 

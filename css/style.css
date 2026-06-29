@@ -732,6 +732,56 @@ select.form-control { cursor: pointer; }
 .gz-btn:hover { background: var(--surface-3); color: var(--text-1); }
 .gz-btn.selected { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 
+/* ============================================================
+   Analyse — Segmented control, Torzonen, Momentum
+   ============================================================ */
+.seg-control {
+  display: inline-flex;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.seg-btn {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  background: var(--surface-1);
+  color: var(--text-2);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.seg-btn:last-child { border-right: none; }
+.seg-btn:hover { background: var(--surface-2); color: var(--text-1); }
+.seg-btn.active { background: var(--accent-dim); color: var(--accent); }
+
+.goalzone-svg {
+  width: 100%;
+  max-width: 300px;
+  display: block;
+  margin: 0 auto;
+}
+
+.run-indicator {
+  font-size: 15px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}
+.run-indicator.run-own { background: var(--green-dim);  color: var(--green); }
+.run-indicator.run-opp { background: var(--accent-dim); color: var(--accent); }
+
+.hot-player {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.hot-flame { font-size: 34px; line-height: 1; }
+.hot-name { font-size: 16px; font-weight: 700; }
+.hot-sub  { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
