@@ -9,7 +9,8 @@ App.data = (function () {
     players: [],
     games: [],
     shots: [],
-    _seq: { player: 1, game: 1, shot: 1 }
+    opponentShots: [],
+    _seq: { player: 1, game: 1, shot: 1, oppShot: 1 }
   };
 
   function load() {
@@ -18,7 +19,9 @@ App.data = (function () {
       if (raw) {
         const parsed = JSON.parse(raw);
         // Ensure _seq exists (migration guard)
-        if (!parsed._seq) parsed._seq = { player: 1, game: 1, shot: 1 };
+        if (!parsed._seq) parsed._seq = { player: 1, game: 1, shot: 1, oppShot: 1 };
+        if (!parsed._seq.oppShot) parsed._seq.oppShot = 1;
+        if (!parsed.opponentShots) parsed.opponentShots = [];
         return parsed;
       }
     } catch (e) { /* ignore */ }
@@ -90,6 +93,7 @@ App.data = (function () {
     deleteGame(id) {
       state.games = state.games.filter(g => g.id !== id);
       state.shots = state.shots.filter(s => s.gameId !== id);
+      state.opponentShots = state.opponentShots.filter(s => s.gameId !== id);
       persist(state);
     },
 
@@ -163,6 +167,50 @@ App.data = (function () {
         .filter(g => g.played)
         .sort((a, b) => new Date(a.date) - new Date(b.date))
         .map(g => ({ label: g.opponent, goalsFor: g.goalsFor, goalsAgainst: g.goalsAgainst }));
+    },
+
+    // ── Opponent Shots ────────────────────────────────────
+    getOpponentShots(gameId) {
+      return gameId != null
+        ? state.opponentShots.filter(s => s.gameId === gameId)
+        : [...state.opponentShots];
+    },
+
+    addOpponentShot(data) {
+      const s = { id: nextId('oppShot'), ...data };
+      state.opponentShots.push(s);
+      persist(state);
+      return s;
+    },
+
+    deleteOpponentShot(id) {
+      state.opponentShots = state.opponentShots.filter(s => s.id !== id);
+      persist(state);
+    },
+
+    getOpponentShotStats(gameId) {
+      const shots = this.getOpponentShots(gameId);
+      return {
+        total:  shots.length,
+        goals:  shots.filter(s => s.outcome === 'goal').length,
+        misses: shots.filter(s => s.outcome === 'miss').length,
+        blocks: shots.filter(s => s.outcome === 'block').length,
+        posts:  shots.filter(s => s.outcome === 'post').length,
+      };
+    },
+
+    // ── Live Score ────────────────────────────────────────
+    getLiveGoalsAgainst(gameId) {
+      const g = state.games.find(g => g.id === gameId);
+      return g ? (g.liveGoalsAgainst || 0) : 0;
+    },
+
+    setLiveGoalsAgainst(gameId, count) {
+      const i = state.games.findIndex(g => g.id === gameId);
+      if (i >= 0) {
+        state.games[i].liveGoalsAgainst = Math.max(0, count);
+        persist(state);
+      }
     },
 
     // ── Import / Export ───────────────────────────────────

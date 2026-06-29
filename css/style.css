@@ -503,6 +503,235 @@ select.form-control { cursor: pointer; }
 .gap-8       { gap: 8px; }
 .w-full      { width: 100%; }
 
+/* ============================================================
+   Live / Spielmodus
+   ============================================================ */
+.live-wrap { max-width: 900px; margin: 0 auto; }
+
+.live-game-bar { margin-bottom: 12px; }
+.live-game-select { max-width: 320px; }
+
+.live-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 22px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.live-score-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.live-score-side { text-align: center; }
+.live-score-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+  margin-bottom: 2px;
+}
+.live-score-num {
+  font-size: 52px;
+  font-weight: 900;
+  line-height: 1;
+  min-width: 54px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.live-score-own { color: var(--green); }
+.live-score-opp { color: var(--accent); }
+.live-score-sep {
+  font-size: 44px;
+  font-weight: 200;
+  color: var(--text-3);
+  line-height: 1;
+  margin-top: 18px;
+}
+.live-opp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+.live-adj-btn {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--text-1);
+  font-size: 22px;
+  font-weight: 300;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.12s;
+}
+.live-adj-btn:hover { background: var(--surface-3); }
+
+.live-timer-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.live-hz-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--blue-dim);
+  color: var(--blue);
+  border-radius: 20px;
+  padding: 3px 10px;
+}
+.live-timer-display {
+  font-size: 34px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  min-width: 80px;
+  text-align: center;
+}
+.live-ctrl-btn {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s;
+}
+.live-ctrl-play { background: var(--accent); color: #fff; }
+.live-ctrl-play:hover { background: var(--accent-dark); }
+.live-ctrl-half {
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  width: auto;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.live-ctrl-half:hover { color: var(--text-1); background: var(--surface-3); }
+
+/* Angriff / Abwehr toggle */
+.live-toggle-bar {
+  display: flex;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  width: fit-content;
+}
+.toggle-btn {
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  background: var(--surface-1);
+  color: var(--text-2);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  transition: background 0.12s, color 0.12s;
+}
+.toggle-btn:last-child { border-right: none; }
+.toggle-btn:hover { background: var(--surface-2); color: var(--text-1); }
+.toggle-btn.toggle-attack.active  { background: var(--green-dim);  color: var(--green); }
+.toggle-btn.toggle-defense.active { background: var(--accent-dim); color: var(--accent); }
+
+/* Live court */
+.live-court-wrap {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+/* Outcome buttons in quick modal */
+.outcome-btn-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.outcome-btn {
+  padding: 11px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 2px solid transparent;
+  text-align: center;
+  transition: all 0.12s;
+}
+.outcome-btn:hover { filter: brightness(1.1); }
+.outcome-btn.selected { border-color: currentColor; }
+.ob-goal  { background: var(--green-dim);  color: var(--green); }
+.ob-miss  { background: var(--accent-dim); color: var(--accent); }
+.ob-block { background: var(--yellow-dim); color: var(--yellow); }
+.ob-post  { background: var(--blue-dim);   color: var(--blue); }
+
+/* Player quick-pick grid */
+.live-player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+  gap: 5px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+.live-player-btn {
+  padding: 7px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 2px solid transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.12s;
+  line-height: 1.2;
+}
+.live-player-btn:hover { background: var(--surface-3); }
+.live-player-btn.selected { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+.live-player-btn .pnum { font-size: 18px; font-weight: 900; display: block; }
+.live-player-btn .pname { font-size: 10px; color: var(--text-2); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Goal zone grid */
+.goal-zone-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  max-width: 180px;
+}
+.gz-btn {
+  aspect-ratio: 1.5;
+  background: var(--surface-2);
+  border: 2px solid var(--border-2);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+.gz-btn:hover { background: var(--surface-3); color: var(--text-1); }
+.gz-btn.selected { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
