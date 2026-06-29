@@ -262,6 +262,26 @@ App.data = (function () {
       return goals.sort((a, b) => a.minute - b.minute);
     },
 
+    // ── Opponent Roster (per game) ────────────────────────────────────
+    getOpponentRoster(gameId) {
+      const g = state.games.find(g => g.id === gameId);
+      return g ? (g.opponentRoster || []) : [];
+    },
+    addOpponentPlayer(gameId, name) {
+      const i = state.games.findIndex(g => g.id === gameId);
+      if (i < 0) return;
+      if (!state.games[i].opponentRoster) state.games[i].opponentRoster = [];
+      state.games[i].opponentRoster.push(name.trim());
+      persist(state);
+    },
+    removeOpponentPlayer(gameId, idx) {
+      const i = state.games.findIndex(g => g.id === gameId);
+      if (i < 0) return;
+      if (!state.games[i].opponentRoster) return;
+      state.games[i].opponentRoster.splice(idx, 1);
+      persist(state);
+    },
+
     // ── Live Score ────────────────────────────────────────
     getLiveGoalsAgainst(gameId) {
       const g = state.games.find(g => g.id === gameId);

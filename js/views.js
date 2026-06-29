@@ -265,7 +265,7 @@ App.views = (function () {
               ${isOwn ? 'Wurf eintragen' : 'Gegner-Wurf eintragen'}
             </button>
             <button class="btn btn-outline" id="btn-clear-shots">Alle löschen</button>
-            <div id="entry-hint" style="font-size:12px;color:var(--text-2);display:none;">Auf das Spielfeld klicken → Wurfposition wählen</div>
+            <div id="entry-hint" style="font-size:12px;color:var(--text-2);display:none;">Auf eine Zone tippen → Wurf erfassen</div>
           </div>
           <div id="court-container"></div>
           <div class="shot-legend mt-10">
@@ -292,7 +292,7 @@ App.views = (function () {
       const courtSvg = App.court.build();
       document.getElementById('court-container').appendChild(courtSvg);
 
-      let entryMode = false;
+      let entryOn = false;
 
       function refresh() {
         if (isOwn) {
@@ -303,6 +303,12 @@ App.views = (function () {
         }
         renderStats();
         renderSecondary();
+        if (entryOn) App.court.renderZones(courtSvg, isOwn ? 'own' : 'opp', pickZone);
+      }
+
+      function pickZone(zoneId, pos) {
+        if (isOwn) App.ui.openShotModal({ rx: pos.rx, ry: pos.ry, gameId: activeGameId, position: zoneId }, refresh);
+        else       App.ui.openOpponentShotModal({ rx: pos.rx, ry: pos.ry, gameId: activeGameId, position: zoneId }, refresh);
       }
 
       function renderStats() {
@@ -372,27 +378,13 @@ App.views = (function () {
 
       refresh();
 
-      // Entry
+      // Entry — toggle the tappable zones on/off
       document.getElementById('btn-add-shot').addEventListener('click', function () {
-        if (entryMode) return;
-        entryMode = true;
-        this.textContent = '…klicke auf das Feld';
-        this.disabled = true;
-        document.getElementById('entry-hint').style.display = 'block';
-
-        App.court.enableEntry(courtSvg, function ({ rx, ry }) {
-          entryMode = false;
-          const btn = document.getElementById('btn-add-shot');
-          if (btn) { btn.textContent = isOwn ? 'Wurf eintragen' : 'Gegner-Wurf eintragen'; btn.disabled = false; }
-          const hint = document.getElementById('entry-hint');
-          if (hint) hint.style.display = 'none';
-
-          if (isOwn) {
-            App.ui.openShotModal({ rx, ry, gameId: activeGameId }, refresh);
-          } else {
-            App.ui.openOpponentShotModal({ rx, ry, gameId: activeGameId }, refresh);
-          }
-        });
+        entryOn = !entryOn;
+        this.textContent = entryOn ? '✓ Fertig' : (isOwn ? 'Wurf eintragen' : 'Gegner-Wurf eintragen');
+        document.getElementById('entry-hint').style.display = entryOn ? 'block' : 'none';
+        if (entryOn) App.court.renderZones(courtSvg, isOwn ? 'own' : 'opp', pickZone);
+        else App.court.clearZones(courtSvg);
       });
 
       // Clear
@@ -644,7 +636,11 @@ App.views = (function () {
           <div class="live-score-wrap">
             <div class="live-score-side">
               <div class="live-score-label">Wir</div>
-              <div class="live-score-num live-score-own" id="live-score-own">0</div>
+              <div class="live-opp-row">
+                <button class="live-adj-btn" id="live-own-minus">−</button>
+                <div class="live-score-num live-score-own" id="live-score-own">0</div>
+                <button class="live-adj-btn" id="live-own-plus">+</button>
+              </div>
             </div>
             <div class="live-score-sep">:</div>
             <div class="live-score-side">
@@ -665,34 +661,19 @@ App.views = (function () {
           </div>
         </div>
 
-        <div class="live-toggle-bar">
-          <button class="toggle-btn toggle-attack active" id="live-btn-attack">⚡ Angriff</button>
-          <button class="toggle-btn toggle-defense" id="live-btn-defense">🛡 Abwehr</button>
-        </div>
-
-        <div class="live-court-wrap">
-          <div id="live-court-host"></div>
-        </div>
-
-        <div class="shot-legend mt-10" style="padding:0 4px;flex-wrap:wrap">
-          <div class="legend-item"><div class="legend-dot" style="background:#3fb968"></div>Tor</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#e84855"></div>Fehlschuss</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#f0a500"></div>Geblockt</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#4a90d9"></div>Pfosten</div>
-          <div class="legend-item" style="margin-left:12px;opacity:0.6">
-            <svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" fill="#8b949e" transform="rotate(45 5 5)"/></svg>
-            Gegner
-          </div>
+        <div id="live-recent-wrap" class="live-recent-wrap">
+          <div id="live-recent"></div>
         </div>
       </div>
     `;
 
     let currentGameId = defaultGame.id;
-    let currentMode = 'attack';
 
-    const courtSvg = App.court.build();
-    courtSvg.classList.add('mode-entry');
-    document.getElementById('live-court-host').appendChild(courtSvg);
+    const ts = App.live;
+
+    function currentMinute() {
+      return ts.timerSeconds > 0 ? Math.max(1, Math.ceil(ts.timerSeconds / 60)) : null;
+    }
 
     function refreshScore() {
       const ownGoals = App.data.getShots(currentGameId).filter(s => s.outcome === 'goal').length;
@@ -703,17 +684,51 @@ App.views = (function () {
       if (oppEl) oppEl.textContent = oppGoals;
     }
 
-    function refreshCourt() {
-      const shots    = App.data.getShots(currentGameId);
-      const oppShots = App.data.getOpponentShots(currentGameId);
-      const players  = App.data.getPlayers();
-      App.court.renderShots(courtSvg, shots, players);
-      App.court.renderOpponentShots(courtSvg, oppShots);
+    const OC_LABEL = { goal: 'Tor', miss: 'Fehlschuss', block: 'Geblockt', post: 'Pfosten' };
+
+    function refreshRecent() {
+      const host = document.getElementById('live-recent');
+      if (!host) return;
+      const ownShots = App.data.getShots(currentGameId).map(s => ({ ...s, side: 'own' }));
+      const oppShots = App.data.getOpponentShots(currentGameId).map(s => ({ ...s, side: 'opp' }));
+      const all = [...ownShots, ...oppShots].sort((a, b) => b.id - a.id).slice(0, 6);
+      const players = App.data.getPlayers();
+
+      if (all.length === 0) {
+        host.innerHTML = '<div class="live-recent-empty">Noch keine Einträge — tippe ⚡ oder Gegner + zum Starten</div>';
+        return;
+      }
+
+      host.innerHTML = `
+        <div class="live-recent-header">Letzte Einträge</div>
+        ${all.map(s => {
+          const player = s.side === 'own' ? players.find(p => p.id === s.playerId) : null;
+          const who = s.side === 'own'
+            ? (player ? `#${player.number} ${player.name.split(' ')[0]}` : '–')
+            : (s.opponentPlayer ? `Gegner ${s.opponentPlayer}` : 'Gegner');
+          const posLabel = s.position ? ` · ${App.court.ZONE_LABELS[s.position] || s.position}` : '';
+          const minLabel = s.minute ? `, ${s.minute}'` : '';
+          return `<div class="live-recent-item">
+            <span class="ri-icon ${s.side === 'own' ? 'ri-own' : 'ri-opp'}">${s.side === 'own' ? '⚡' : '🛡'}</span>
+            <span class="ri-text">${who} — <strong>${OC_LABEL[s.outcome] || s.outcome}</strong>${posLabel}${minLabel}</span>
+            <button class="ri-del" data-del-id="${s.id}" data-del-side="${s.side}">×</button>
+          </div>`;
+        }).join('')}
+      `;
     }
 
-    // ── Timer ──────────────────────────────────────────────────────
-    const ts = App.live;
+    // Delete via event delegation on the stable wrapper
+    document.getElementById('live-recent-wrap').addEventListener('click', e => {
+      const btn = e.target.closest('[data-del-id]');
+      if (!btn) return;
+      const id = parseInt(btn.dataset.delId);
+      if (btn.dataset.delSide === 'own') App.data.deleteShot(id);
+      else App.data.deleteOpponentShot(id);
+      refreshScore();
+      refreshRecent();
+    });
 
+    // ── Timer ──────────────────────────────────────────────────────
     function fmtTime(s) {
       return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
     }
@@ -741,16 +756,12 @@ App.views = (function () {
     if (ts.timerRunning && !ts.timerInterval) startTimer();
     updateTimerUI();
     refreshScore();
-    refreshCourt();
+    refreshRecent();
 
     document.getElementById('live-timer-toggle').addEventListener('click', () => {
       ts.timerRunning = !ts.timerRunning;
-      if (ts.timerRunning) {
-        startTimer();
-      } else {
-        clearInterval(ts.timerInterval);
-        ts.timerInterval = null;
-      }
+      if (ts.timerRunning) startTimer();
+      else { clearInterval(ts.timerInterval); ts.timerInterval = null; }
       updateTimerUI();
     });
 
@@ -764,53 +775,57 @@ App.views = (function () {
     });
 
     // ── Opponent score ─────────────────────────────────────────────
-    document.getElementById('live-opp-plus').addEventListener('click', () => {
-      App.data.setLiveGoalsAgainst(currentGameId, App.data.getLiveGoalsAgainst(currentGameId) + 1);
-      refreshScore();
-    });
     document.getElementById('live-opp-minus').addEventListener('click', () => {
       App.data.setLiveGoalsAgainst(currentGameId, App.data.getLiveGoalsAgainst(currentGameId) - 1);
       refreshScore();
+    });
+
+    // Wir + → attack modal · Wir − → letztes Tor rückgängig
+    document.getElementById('live-own-plus').addEventListener('click', () => {
+      openAttackModal(currentGameId, currentMinute());
+    });
+    document.getElementById('live-own-minus').addEventListener('click', () => {
+      const goals = App.data.getShots(currentGameId).filter(s => s.outcome === 'goal');
+      if (goals.length === 0) return;
+      App.data.deleteShot(goals[goals.length - 1].id);
+      refreshScore();
+      refreshRecent();
+      App.ui.toast('Letztes Tor rückgängig', 'inf');
+    });
+
+    // Gegner + → defense modal; Zähler steigt nur bei gespeichertem Tor
+    document.getElementById('live-opp-plus').addEventListener('click', () => {
+      openDefenseModal(currentGameId, currentMinute());
     });
 
     // ── Game select ────────────────────────────────────────────────
     document.getElementById('live-game-select').addEventListener('change', function () {
       currentGameId = parseInt(this.value);
       refreshScore();
-      refreshCourt();
-    });
-
-    // ── Mode toggle ────────────────────────────────────────────────
-    document.getElementById('live-btn-attack').addEventListener('click', () => {
-      currentMode = 'attack';
-      document.getElementById('live-btn-attack').className  = 'toggle-btn toggle-attack active';
-      document.getElementById('live-btn-defense').className = 'toggle-btn toggle-defense';
-    });
-    document.getElementById('live-btn-defense').addEventListener('click', () => {
-      currentMode = 'defense';
-      document.getElementById('live-btn-attack').className  = 'toggle-btn toggle-attack';
-      document.getElementById('live-btn-defense').className = 'toggle-btn toggle-defense active';
-    });
-
-    // ── Court click → quick modal ──────────────────────────────────
-    courtSvg.addEventListener('click', (e) => {
-      if (e.target.closest('.shot-marker') || e.target.closest('.opp-shot-marker')) return;
-      const pos    = App.court.svgToRelative(courtSvg, e.clientX, e.clientY);
-      const minute = ts.timerSeconds > 0 ? Math.max(1, Math.ceil(ts.timerSeconds / 60)) : null;
-      if (currentMode === 'attack') {
-        openAttackModal(pos, currentGameId, minute);
-      } else {
-        openDefenseModal(pos, currentGameId, minute);
-      }
+      refreshRecent();
     });
 
     // ── Attack modal ───────────────────────────────────────────────
-    function openAttackModal({ rx, ry }, gameId, autoMinute) {
+    const LIVE_ZONES = [
+      { id:'la',  label:'LA' }, { id:'hld', label:'HL fern' }, { id:'hl1', label:'HL 1:1' },
+      { id:'md',  label:'M fern' }, { id:'m1', label:'M 1:1' }, { id:'p7', label:'7m' },
+      { id:'km',  label:'Kreis' }, { id:'hr1', label:'HR 1:1' }, { id:'hrd', label:'HR fern' },
+      { id:'ra',  label:'RA' },
+    ];
+
+    function openAttackModal(gameId, autoMinute) {
       const players = App.data.getPlayers();
       let selectedPlayerId = null;
       let selectedOutcome  = null;
+      let selectedPosition = null;
 
       const html = `
+        <div class="form-group">
+          <label>Position</label>
+          <div class="zone-btn-grid">
+            ${LIVE_ZONES.map(z => `<button class="zone-pick-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
+          </div>
+        </div>
         ${players.length > 0 ? `
         <div class="form-group">
           <label>Spieler</label>
@@ -843,6 +858,14 @@ App.views = (function () {
       App.ui.openModal('Wurf eintragen', html);
 
       setTimeout(() => {
+        document.querySelectorAll('.zone-pick-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            selectedPosition = btn.dataset.zone;
+            document.querySelectorAll('.zone-pick-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+          });
+        });
+
         document.getElementById('lm-players')?.addEventListener('click', e => {
           const btn = e.target.closest('[data-pid]');
           if (!btn) return;
@@ -861,20 +884,22 @@ App.views = (function () {
 
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
+          const pos = selectedPosition ? App.court.zoneCenterRel(selectedPosition, 'own') : { rx: 0.75, ry: 0.5 };
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
-          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx, ry });
+          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedPosition });
           App.ui.closeModal();
           App.ui.toast('Wurf gespeichert', 'ok');
           refreshScore();
-          refreshCourt();
+          refreshRecent();
         });
       }, 0);
     }
 
-    // ── Defense modal ──────────────────────────────────────────────
-    function openDefenseModal({ rx, ry }, gameId, autoMinute) {
-      let selectedOutcome = null;
-      let selectedZone    = null;
+    // ── Defense modal (with opponent roster) ──────────────────────
+    function openDefenseModal(gameId, autoMinute) {
+      let selectedOutcome   = null;
+      let selectedZone      = null;
+      let selectedOppPlayer = null;
 
       const ZONES = [
         { id:'tl', label:'OL' }, { id:'tm', label:'OM' }, { id:'tr', label:'OR' },
@@ -884,8 +909,14 @@ App.views = (function () {
 
       const html = `
         <div class="form-group">
-          <label>Gegner-Spieler (optional)</label>
-          <input class="form-control" id="lm-opp-player" placeholder="Nummer oder Name" maxlength="20">
+          <label>Gegner-Spieler</label>
+          <div id="opp-player-wrap">
+            <div class="opp-roster-row" id="opp-roster-chips"></div>
+            <div class="opp-add-row" id="opp-add-row" style="display:none">
+              <input class="form-control" id="opp-new-player" placeholder="Nr. oder Name" maxlength="20" style="flex:1">
+              <button class="btn btn-primary btn-sm" id="btn-add-confirm">OK</button>
+            </div>
+          </div>
         </div>
         <div class="form-group">
           <label>Ergebnis</label>
@@ -914,6 +945,39 @@ App.views = (function () {
       App.ui.openModal('Gegner-Wurf eintragen', html);
 
       setTimeout(() => {
+        function buildRosterChips() {
+          const roster = App.data.getOpponentRoster(gameId);
+          const chips = document.getElementById('opp-roster-chips');
+          if (!chips) return;
+          chips.innerHTML = roster.map((name, i) =>
+            `<button class="opp-roster-btn${selectedOppPlayer === name ? ' selected' : ''}" data-name="${name}" data-idx="${i}">${name}</button>`
+          ).join('') + '<button class="opp-roster-add" id="btn-opp-add">+ Hinzufügen</button>';
+        }
+        buildRosterChips();
+
+        // Player select + add button via delegation on stable wrapper
+        document.getElementById('opp-player-wrap').addEventListener('click', e => {
+          if (e.target.id === 'btn-opp-add') {
+            document.getElementById('opp-add-row').style.display = 'flex';
+            document.getElementById('opp-new-player')?.focus();
+            return;
+          }
+          const btn = e.target.closest('.opp-roster-btn');
+          if (btn) {
+            selectedOppPlayer = selectedOppPlayer === btn.dataset.name ? null : btn.dataset.name;
+            buildRosterChips();
+          }
+        });
+
+        document.getElementById('btn-add-confirm')?.addEventListener('click', () => {
+          const name = document.getElementById('opp-new-player')?.value.trim();
+          if (!name) return;
+          App.data.addOpponentPlayer(gameId, name);
+          document.getElementById('opp-new-player').value = '';
+          document.getElementById('opp-add-row').style.display = 'none';
+          buildRosterChips();
+        });
+
         document.querySelectorAll('.outcome-btn').forEach(btn => {
           btn.addEventListener('click', () => {
             selectedOutcome = btn.dataset.oc;
@@ -932,13 +996,15 @@ App.views = (function () {
 
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
-          const oppPlayer = document.getElementById('lm-opp-player')?.value.trim() || null;
-          const minute    = parseInt(document.getElementById('lm-minute')?.value) || null;
-          App.data.addOpponentShot({ gameId, opponentPlayer: oppPlayer, outcome: selectedOutcome, minute, rx, ry, goalZone: selectedZone });
+          const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
+          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, rx: 0.25, ry: 0.5, goalZone: selectedZone });
+          if (selectedOutcome === 'goal') {
+            App.data.setLiveGoalsAgainst(gameId, App.data.getLiveGoalsAgainst(gameId) + 1);
+          }
           App.ui.closeModal();
           App.ui.toast('Gegner-Wurf gespeichert', 'ok');
           refreshScore();
-          refreshCourt();
+          refreshRecent();
         });
       }, 0);
     }
