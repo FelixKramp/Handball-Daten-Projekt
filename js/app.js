@@ -88,6 +88,63 @@ App.ui = (function () {
     });
   }
 
+  // ── Opponent Shot Modal (incl. goal zone for goalkeeper analysis) ──
+  function openOpponentShotModal({ rx, ry, gameId, minute }, onSave) {
+    const ZONES = [
+      { id:'tl', label:'OL' }, { id:'tm', label:'OM' }, { id:'tr', label:'OR' },
+      { id:'ml', label:'ML' }, { id:'mm', label:'MM' }, { id:'mr', label:'MR' },
+      { id:'bl', label:'UL' }, { id:'bm', label:'UM' }, { id:'br', label:'UR' },
+    ];
+    let selectedZone = null;
+    const html = `
+      <div class="form-group">
+        <label>Gegner-Spieler (optional)</label>
+        <input class="form-control" id="f-opp-player" placeholder="Nummer oder Name" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label>Ergebnis</label>
+        <select class="form-control" id="f-opp-outcome">
+          <option value="goal">Tor</option>
+          <option value="miss">Fehlschuss</option>
+          <option value="block">Geblockt</option>
+          <option value="post">Pfosten</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Torzone (aus Torwart-Sicht)</label>
+        <div class="goal-zone-grid">
+          ${ZONES.map(z => `<button type="button" class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Spielminute</label>
+        <input class="form-control" id="f-opp-minute" type="number" min="1" max="60" value="${minute || ''}" placeholder="30">
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-outline" id="btn-opp-cancel">Abbrechen</button>
+        <button class="btn btn-primary" id="btn-save-opp">Speichern</button>
+      </div>
+    `;
+    openModal('Gegner-Wurf erfassen', html);
+    document.querySelectorAll('.gz-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedZone = btn.dataset.zone;
+        document.querySelectorAll('.gz-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
+    document.getElementById('btn-opp-cancel').addEventListener('click', () => closeModal());
+    document.getElementById('btn-save-opp').addEventListener('click', () => {
+      const opponentPlayer = document.getElementById('f-opp-player').value.trim() || null;
+      const outcome  = document.getElementById('f-opp-outcome').value;
+      const minute   = parseInt(document.getElementById('f-opp-minute').value) || null;
+      App.data.addOpponentShot({ gameId, opponentPlayer, outcome, minute, rx, ry, goalZone: selectedZone });
+      closeModal();
+      toast('Gegner-Wurf gespeichert', 'ok');
+      if (onSave) onSave();
+    });
+  }
+
   // ── Router ────────────────────────────────────────────────────────
   const views = {
     dashboard: { title: 'Dashboard',     render: App.views.renderDashboard },
@@ -294,7 +351,7 @@ App.ui = (function () {
     navigate('dashboard');
   }
 
-  return { openModal, closeModal, toast, openShotModal, navigate, init };
+  return { openModal, closeModal, toast, openShotModal, openOpponentShotModal, navigate, init };
 })();
 
 App.ui.init();
