@@ -226,5 +226,71 @@ App.court = (function () {
     return svg;
   }
 
-  return { build, renderShots, renderOpponentShots, enableEntry, buildGoalZoneGrid, OUTCOME_COLOR, svgToRelative };
+  // ── Wurfzonen (feste Handball-Positionen) ─────────────────────────
+  // Coordinates are for attacking the RIGHT goal. Defense mirrors across x.
+  const ATTACK_ZONES = [
+    { id:'la',  label:'LA',     cx:695, cy:112 },
+    { id:'hld', label:'HL fern',cx:460, cy:135 },
+    { id:'hl1', label:'HL 1:1', cx:560, cy:152 },
+    { id:'md',  label:'M fern', cx:460, cy:200 },
+    { id:'m1',  label:'M 1:1',  cx:565, cy:200 },
+    { id:'p7',  label:'7m',     cx:648, cy:200 },
+    { id:'km',  label:'Kreis',  cx:712, cy:200 },
+    { id:'hr1', label:'HR 1:1', cx:560, cy:248 },
+    { id:'hrd', label:'HR fern',cx:460, cy:265 },
+    { id:'ra',  label:'RA',     cx:695, cy:288 },
+  ];
+
+  const ZONE_LABELS = {
+    la:'Linksaußen', ra:'Rechtsaußen', km:'Kreis', p7:'7 Meter',
+    hl1:'Halblinks 1:1', hld:'Halblinks Distanz',
+    m1:'Mitte 1:1',  md:'Mitte Distanz',
+    hr1:'Halbrechts 1:1', hrd:'Halbrechts Distanz',
+  };
+
+  function zoneCenterRel(id, side) {
+    const z = ATTACK_ZONES.find(z => z.id === id);
+    if (!z) return { rx: 0.5, ry: 0.5 };
+    const cx = side === 'opp' ? VW - z.cx : z.cx;
+    return { rx: cx / VW, ry: z.cy / VH };
+  }
+
+  // Render clickable zone chips on the court. side: 'own' (right goal) | 'opp' (left, mirrored).
+  // onPick(zoneId, { rx, ry }) is called when a chip is tapped.
+  function renderZones(svg, side, onPick) {
+    let layer = svg.querySelector('#zone-layer');
+    if (!layer) { layer = ns('g', { id: 'zone-layer' }); svg.appendChild(layer); }
+    while (layer.firstChild) layer.removeChild(layer.firstChild);
+
+    ATTACK_ZONES.forEach(z => {
+      const cx = side === 'opp' ? VW - z.cx : z.cx;
+      const w = z.label.length > 3 ? 60 : 40, h = 26;
+      const g = ns('g', { class: `zone-chip${side === 'opp' ? ' opp' : ''}`, 'data-zone': z.id });
+      g.appendChild(ns('rect', { x: cx - w / 2, y: z.cy - h / 2, width: w, height: h, rx: 13, class: 'zone-chip-bg' }));
+      const t = ns('text', { x: cx, y: z.cy + 4, 'text-anchor': 'middle', class: 'zone-chip-label' });
+      t.textContent = z.label;
+      g.appendChild(t);
+      layer.appendChild(g);
+    });
+
+    svg._zoneSide = side;
+    svg._zonePick = onPick;
+    if (!svg._zoneHandler) {
+      svg._zoneHandler = e => {
+        const chip = e.target.closest('.zone-chip');
+        if (!chip || !svg._zonePick) return;
+        svg._zonePick(chip.dataset.zone, zoneCenterRel(chip.dataset.zone, svg._zoneSide));
+      };
+      svg.addEventListener('click', svg._zoneHandler);
+    }
+  }
+
+  function clearZones(svg) {
+    const layer = svg.querySelector('#zone-layer');
+    if (layer) while (layer.firstChild) layer.removeChild(layer.firstChild);
+    svg._zonePick = null;
+  }
+
+  return { build, renderShots, renderOpponentShots, enableEntry, buildGoalZoneGrid,
+           renderZones, clearZones, zoneCenterRel, ZONE_LABELS, OUTCOME_COLOR, svgToRelative };
 })();
