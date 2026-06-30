@@ -47,9 +47,11 @@ App.ui = (function () {
   }
 
   // ── Shot Modal ───────────────────────────────────────────────────
-  function openShotModal({ rx, ry, gameId }, onSave) {
+  function openShotModal({ rx, ry, gameId, position }, onSave) {
     const players = App.data.getPlayers();
+    const zoneName = position ? (App.court.ZONE_LABELS[position] || position) : null;
     const html = `
+      ${zoneName ? `<div class="zone-pill">Position: <strong>${zoneName}</strong></div>` : ''}
       <div class="form-group">
         <label>Spieler</label>
         <select class="form-control" id="f-shot-player">
@@ -81,7 +83,7 @@ App.ui = (function () {
       const playerId = parseInt(document.getElementById('f-shot-player').value) || null;
       const outcome  = document.getElementById('f-shot-outcome').value;
       const minute   = parseInt(document.getElementById('f-shot-minute').value) || null;
-      App.data.addShot({ gameId, playerId, outcome, minute, rx, ry });
+      App.data.addShot({ gameId, playerId, outcome, minute, rx, ry, position });
       closeModal();
       toast('Wurf gespeichert', 'ok');
       if (onSave) onSave();
@@ -89,7 +91,8 @@ App.ui = (function () {
   }
 
   // ── Opponent Shot Modal (incl. goal zone for goalkeeper analysis) ──
-  function openOpponentShotModal({ rx, ry, gameId, minute }, onSave) {
+  function openOpponentShotModal({ rx, ry, gameId, minute, position }, onSave) {
+    const zoneName = position ? (App.court.ZONE_LABELS[position] || position) : null;
     const ZONES = [
       { id:'tl', label:'OL' }, { id:'tm', label:'OM' }, { id:'tr', label:'OR' },
       { id:'ml', label:'ML' }, { id:'mm', label:'MM' }, { id:'mr', label:'MR' },
@@ -97,6 +100,7 @@ App.ui = (function () {
     ];
     let selectedZone = null;
     const html = `
+      ${zoneName ? `<div class="zone-pill opp">Position: <strong>${zoneName}</strong></div>` : ''}
       <div class="form-group">
         <label>Gegner-Spieler (optional)</label>
         <input class="form-control" id="f-opp-player" placeholder="Nummer oder Name" maxlength="20">
@@ -138,7 +142,7 @@ App.ui = (function () {
       const opponentPlayer = document.getElementById('f-opp-player').value.trim() || null;
       const outcome  = document.getElementById('f-opp-outcome').value;
       const minute   = parseInt(document.getElementById('f-opp-minute').value) || null;
-      App.data.addOpponentShot({ gameId, opponentPlayer, outcome, minute, rx, ry, goalZone: selectedZone });
+      App.data.addOpponentShot({ gameId, opponentPlayer, outcome, minute, rx, ry, goalZone: selectedZone, position });
       closeModal();
       toast('Gegner-Wurf gespeichert', 'ok');
       if (onSave) onSave();
