@@ -1010,12 +1010,180 @@ App.views = (function () {
     }
   }
 
+  // ── Spieler-Statistiken ──────────────────────────────────────
+
+  function renderStats(el) {
+    const players = App.data.getPlayers();
+
+    if (players.length === 0) {
+      el.innerHTML = `<div class="empty"><h3>Keine Spieler im Kader</h3><p>Füge zuerst Spieler im Kader hinzu.</p></div>`;
+      return;
+    }
+
+    let statsData = App.data.getPlayerSeasonStats();
+    let sortKey   = 'goals';
+    let sortAsc   = false;
+
+    const COLS = [
+      { key: 'number',      label: '#'       },
+      { key: 'name',        label: 'Name'    },
+      { key: 'position',    label: 'Pos'     },
+      { key: 'shots',       label: 'Würfe'   },
+      { key: 'goals',       label: 'Tore'    },
+      { key: 'pct',         label: 'Quote'   },
+      { key: 'assists',     label: 'Assists'  },
+      { key: 'yellowCards', label: '2min'    },
+      { key: 'redCards',    label: 'Rot'     },
+    ];
+
+    function getSortVal(row, key) {
+      if (key === 'number')   return row.player.number || 0;
+      if (key === 'name')     return row.player.name || '';
+      if (key === 'position') return row.player.position || '';
+      if (key === 'pct')      return row.pct != null ? row.pct : -1;
+      return row[key] != null ? row[key] : 0;
+    }
+
+    function renderTable() {
+      const wrap = document.getElementById('stats-table-wrap');
+      if (!wrap) return;
+
+      const sorted = [...statsData].sort((a, b) => {
+        const av = getSortVal(a, sortKey);
+        const bv = getSortVal(b, sortKey);
+        if (typeof av === 'string') return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+        return sortAsc ? av - bv : bv - av;
+      });
+
+      const thead = COLS.map(c => {
+        const active = c.key === sortKey;
+        const arrow  = active ? (sortAsc ? ' ↑' : ' ↓') : '';
+        return `<th class="sortable${active ? ' sort-active' : ''}" data-sort="${c.key}">${c.label}${arrow}</th>`;
+      }).join('');
+
+      const tbody = sorted.map(row => `
+        <tr class="clickable" data-player-id="${row.player.id}">
+          <td>${row.player.number || '–'}</td>
+          <td class="font-bold">${row.player.name}</td>
+          <td>${row.player.position || '–'}</td>
+          <td>${row.shots}</td>
+          <td class="${row.goals > 0 ? 'text-green font-bold' : ''}">${row.goals}</td>
+          <td>${row.pct != null ? row.pct + '%' : '–'}</td>
+          <td>${row.assists}</td>
+          <td>${row.yellowCards > 0 ? `<span class="text-yellow">${row.yellowCards}</span>` : 0}</td>
+          <td>${row.redCards > 0 ? `<span class="text-red">${row.redCards}</span>` : 0}</td>
+        </tr>`).join('');
+
+      wrap.innerHTML = `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+    }
+
+    el.innerHTML = `
+      <div class="section">
+        <div class="card">
+          <div class="table-wrap" id="stats-table-wrap"></div>
+        </div>
+      </div>
+    `;
+
+    renderTable();
+
+    const STAT_ZONE_LABELS = { la:'LA', hld:'HL fern', hl1:'HL 1:1', md:'M fern', m1:'M 1:1', p7:'7m', km:'Kreis', hr1:'HR 1:1', hrd:'HR fern', ra:'RA' };
+    const ZONE_ORDER = ['la','hld','hl1','md','m1','p7','km','hr1','hrd','ra'];
+
+    document.getElementById('stats-table-wrap').addEventListener('click', e => {
+      const th = e.target.closest('th.sortable');
+      if (th) {
+        const key = th.dataset.sort;
+        if (key === sortKey) sortAsc = !sortAsc;
+        else { sortKey = key; sortAsc = false; }
+        renderTable();
+        return;
+      }
+      const tr = e.target.closest('tr.clickable');
+      if (tr) openPlayerDetail(parseInt(tr.dataset.playerId));
+    });
+
+    function openPlayerDetail(playerId) {
+      const row = statsData.find(r => r.player.id === playerId);
+      if (!row) return;
+      const player   = row.player;
+      const gameStat = App.data.getPlayerGameStats(playerId);
+
+      const allShots = App.data.getShots().filter(s => s.playerId === playerId && s.position);
+      const zoneTally = {};
+      ZONE_ORDER.forEach(z => { zoneTally[z] = 0; });
+      allShots.forEach(s => { if (zoneTally[s.position] != null) zoneTally[s.position]++; });
+      const zoneData = ZONE_ORDER.filter(z => zoneTally[z] > 0);
+
+      const gameTableHtml = gameStat.length === 0
+        ? '<div class="text-muted text-sm" style="margin-bottom:16px">Noch keine Wurfeinträge vorhanden</div>'
+        : `<div class="card-title" style="margin-bottom:8px">Pro Spiel</div>
+           <div class="table-wrap" style="margin-bottom:20px">
+             <table>
+               <thead><tr><th>Gegner</th><th>Würfe</th><th>Tore</th><th>Quote</th></tr></thead>
+               <tbody>${gameStat.map(gs => `
+                 <tr>
+                   <td>${gs.game.opponent}</td>
+                   <td>${gs.shots}</td>
+                   <td class="text-green">${gs.goals}</td>
+                   <td>${gs.pct != null ? gs.pct + '%' : '–'}</td>
+                 </tr>`).join('')}
+               </tbody>
+             </table>
+           </div>`;
+
+      const zoneChartHtml = zoneData.length > 0
+        ? `<div class="card-title" style="margin-bottom:8px">Würfe nach Zone</div>
+           <div class="chart-wrap" style="height:${Math.min(zoneData.length * 32 + 20, 280)}px"><canvas id="player-zone-chart"></canvas></div>`
+        : '';
+
+      const html = `
+        <div class="text-muted text-sm" style="margin-bottom:16px">#${player.number || '–'} · ${POS_LABELS[player.position] || player.position || '–'}</div>
+        <div class="stat-row" style="flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+          <div class="stat-col"><span class="v">${row.shots}</span><span class="l">Würfe</span></div>
+          <div class="stat-col"><span class="v text-green">${row.goals}</span><span class="l">Tore</span></div>
+          <div class="stat-col"><span class="v">${row.pct != null ? row.pct + '%' : '–'}</span><span class="l">Quote</span></div>
+          <div class="stat-col"><span class="v">${row.assists}</span><span class="l">Assists</span></div>
+          <div class="stat-col"><span class="v ${row.yellowCards > 0 ? 'text-yellow' : ''}">${row.yellowCards}</span><span class="l">2min</span></div>
+          <div class="stat-col"><span class="v ${row.redCards > 0 ? 'text-red' : ''}">${row.redCards}</span><span class="l">Rot</span></div>
+        </div>
+        ${gameTableHtml}
+        ${zoneChartHtml}
+      `;
+
+      App.ui.openModal(player.name, html);
+
+      if (zoneData.length > 0) {
+        setTimeout(() => {
+          const ctx = document.getElementById('player-zone-chart');
+          if (!ctx) return;
+          new Chart(ctx.getContext('2d'), {
+            type: 'bar',
+            data: {
+              labels: zoneData.map(z => STAT_ZONE_LABELS[z] || z),
+              datasets: [{ data: zoneData.map(z => zoneTally[z]), backgroundColor: 'rgba(63,185,104,0.7)', borderRadius: 4, label: 'Würfe' }]
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { display: false } }
+              }
+            }
+          });
+        }, 0);
+      }
+    }
+  }
+
   return {
     renderDashboard,
     renderSquad,
     renderAnalysis,
     renderSchedule,
     renderLive,
+    renderStats,
     playerFormHTML,
     collectPlayerForm,
     gameFormHTML,

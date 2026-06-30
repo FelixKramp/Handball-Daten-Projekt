@@ -944,6 +944,15 @@ select.form-control { cursor: pointer; }
 .zone-pick-btn:hover { background: var(--surface-3); color: var(--text-1); }
 .zone-pick-btn.selected { background: var(--green-dim); color: var(--green); border-color: var(--green); }
 
+/* ============================================================
+   Stats view — sortable table
+   ============================================================ */
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text-1); background: rgba(255,255,255,0.03); }
+th.sort-active { color: var(--accent); }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--accent-dim) !important; }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
