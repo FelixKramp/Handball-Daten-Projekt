@@ -151,11 +151,12 @@ App.ui = (function () {
 
   // ── Router ────────────────────────────────────────────────────────
   const views = {
-    dashboard: { title: 'Dashboard',     render: App.views.renderDashboard },
-    live:      { title: 'Spielmodus',    render: App.views.renderLive },
+    dashboard: { title: 'Dashboard',      render: App.views.renderDashboard },
+    live:      { title: 'Spielmodus',     render: App.views.renderLive },
     squad:     { title: 'Kader',          render: App.views.renderSquad },
     analysis:  { title: 'Spielanalyse',   render: App.views.renderAnalysis },
     schedule:  { title: 'Spielplan',      render: App.views.renderSchedule },
+    stats:     { title: 'Statistiken',    render: App.views.renderStats },
   };
 
   const content      = document.getElementById('page-content');

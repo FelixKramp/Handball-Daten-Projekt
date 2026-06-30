@@ -296,6 +296,42 @@ App.data = (function () {
       }
     },
 
+    // ── Spieler-Statistiken ───────────────────────────────────
+    getPlayerSeasonStats() {
+      return state.players.map(player => {
+        const shots  = state.shots.filter(s => s.playerId === player.id);
+        const goals  = shots.filter(s => s.outcome === 'goal').length;
+        const misses = shots.filter(s => s.outcome === 'miss').length;
+        const blocks = shots.filter(s => s.outcome === 'block').length;
+        const posts  = shots.filter(s => s.outcome === 'post').length;
+        const total  = shots.length;
+        return {
+          player,
+          shots: total, goals, misses, blocks, posts,
+          pct:         total > 0 ? Math.round(goals / total * 100) : null,
+          assists:     player.assists || 0,
+          yellowCards: player.yellowCards || 0,
+          redCards:    player.redCards || 0,
+        };
+      });
+    },
+
+    getPlayerGameStats(playerId) {
+      return state.games
+        .filter(g => g.played)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .reduce((acc, game) => {
+          const shots  = state.shots.filter(s => s.gameId === game.id && s.playerId === playerId);
+          if (shots.length === 0) return acc;
+          const goals  = shots.filter(s => s.outcome === 'goal').length;
+          const misses = shots.filter(s => s.outcome === 'miss').length;
+          const blocks = shots.filter(s => s.outcome === 'block').length;
+          const posts  = shots.filter(s => s.outcome === 'post').length;
+          acc.push({ game, shots: shots.length, goals, misses, blocks, posts, pct: shots.length > 0 ? Math.round(goals / shots.length * 100) : null });
+          return acc;
+        }, []);
+    },
+
     // ── Import / Export ───────────────────────────────────
     exportJSON()  { return JSON.stringify(state, null, 2); },
     importJSON(s) {
