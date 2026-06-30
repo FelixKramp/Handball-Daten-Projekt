@@ -811,6 +811,11 @@ select.form-control { cursor: pointer; }
 }
 .zone-chip.opp:hover .zone-chip-bg,
 .zone-chip.opp:active .zone-chip-bg { fill: rgba(232,72,85,0.42); }
+.zone-chip.selected .zone-chip-bg {
+  fill: rgba(63,185,104,0.55);
+  stroke: #3fb968;
+  stroke-width: 2.5;
+}
 .zone-chip-label {
   fill: #fff;
   font-size: 11px;
@@ -922,27 +927,6 @@ select.form-control { cursor: pointer; }
   align-items: center;
   margin-top: 6px;
 }
-
-/* Zone picker buttons inside attack modal */
-.zone-btn-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.zone-pick-btn {
-  padding: 7px 13px;
-  border-radius: 20px;
-  border: 1.5px solid var(--border-2);
-  background: var(--surface-2);
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.12s;
-  white-space: nowrap;
-}
-.zone-pick-btn:hover { background: var(--surface-3); color: var(--text-1); }
-.zone-pick-btn.selected { background: var(--green-dim); color: var(--green); border-color: var(--green); }
 
 /* ============================================================
    Stats view — sortable table

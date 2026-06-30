@@ -276,7 +276,7 @@ App.views = (function () {
           </div>
         </div>
         <div class="section" style="margin-top:24px;">
-          <div class="grid-2">
+          <div class="${isOwn ? 'grid-3' : 'grid-2'}">
             <div class="card">
               <div class="card-title">Wurfstatistik${isOwn ? '' : ' (Gegner)'}</div>
               <div id="shot-stats-content"></div>
@@ -285,6 +285,11 @@ App.views = (function () {
               <div class="card-title">${isOwn ? 'Tore nach Spieler' : 'Torzonen — wo wir kassieren'}</div>
               <div id="secondary-panel"></div>
             </div>
+            ${isOwn ? `
+            <div class="card">
+              <div class="card-title">Torzonen — wo wir treffen</div>
+              <div id="own-goalzone-panel"></div>
+            </div>` : ''}
           </div>
         </div>
       `;
@@ -303,6 +308,7 @@ App.views = (function () {
         }
         renderStats();
         renderSecondary();
+        if (isOwn) renderOwnGoalZone();
         if (entryOn) App.court.renderZones(courtSvg, isOwn ? 'own' : 'opp', pickZone);
       }
 
@@ -373,6 +379,18 @@ App.views = (function () {
             host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm" style="text-align:center;margin-top:8px">Aus Sicht des Torwarts · Zahl = kassierte Tore</div>';
             host.querySelector('.goalzone-host').appendChild(App.court.buildGoalZoneGrid(gz));
           }
+        }
+      }
+
+      function renderOwnGoalZone() {
+        const host = document.getElementById('own-goalzone-panel');
+        if (!host) return;
+        const gz = App.data.getGoalZoneStats(activeGameId, 'own');
+        if (gz.total === 0) {
+          host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine eigenen Tore mit Torzone erfasst.<br>Trage Würfe im Spielmodus mit Torzone ein.</div>';
+        } else {
+          host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm" style="text-align:center;margin-top:8px">Aus eigener Sicht · Zahl = erzielte Tore</div>';
+          host.querySelector('.goalzone-host').appendChild(App.court.buildGoalZoneGrid(gz, '63,185,104'));
         }
       }
 
@@ -806,11 +824,10 @@ App.views = (function () {
     });
 
     // ── Attack modal ───────────────────────────────────────────────
-    const LIVE_ZONES = [
-      { id:'la',  label:'LA' }, { id:'hld', label:'HL fern' }, { id:'hl1', label:'HL 1:1' },
-      { id:'md',  label:'M fern' }, { id:'m1', label:'M 1:1' }, { id:'p7', label:'7m' },
-      { id:'km',  label:'Kreis' }, { id:'hr1', label:'HR 1:1' }, { id:'hrd', label:'HR fern' },
-      { id:'ra',  label:'RA' },
+    const GOAL_TARGET_ZONES = [
+      { id:'tl', label:'OL' }, { id:'tm', label:'OM' }, { id:'tr', label:'OR' },
+      { id:'ml', label:'ML' }, { id:'mm', label:'MM' }, { id:'mr', label:'MR' },
+      { id:'bl', label:'UL' }, { id:'bm', label:'UM' }, { id:'br', label:'UR' },
     ];
 
     function openAttackModal(gameId, autoMinute) {
@@ -818,13 +835,12 @@ App.views = (function () {
       let selectedPlayerId = null;
       let selectedOutcome  = null;
       let selectedPosition = null;
+      let selectedGoalZone = null;
 
       const html = `
         <div class="form-group">
-          <label>Position</label>
-          <div class="zone-btn-grid">
-            ${LIVE_ZONES.map(z => `<button class="zone-pick-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
-          </div>
+          <label>Position (Wurfort)</label>
+          <div class="live-court-wrap" id="lm-court-wrap"></div>
         </div>
         ${players.length > 0 ? `
         <div class="form-group">
@@ -847,6 +863,12 @@ App.views = (function () {
           </div>
         </div>
         <div class="form-group">
+          <label>Torzone (wohin geworfen, aus eigener Sicht)</label>
+          <div class="goal-zone-grid">
+            ${GOAL_TARGET_ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
+          </div>
+        </div>
+        <div class="form-group">
           <label>Minute</label>
           <input class="form-control" id="lm-minute" type="number" min="1" max="60" value="${autoMinute || ''}">
         </div>
@@ -858,12 +880,12 @@ App.views = (function () {
       App.ui.openModal('Wurf eintragen', html);
 
       setTimeout(() => {
-        document.querySelectorAll('.zone-pick-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            selectedPosition = btn.dataset.zone;
-            document.querySelectorAll('.zone-pick-btn').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-          });
+        // Halbkreis-Spielfeld als Positions-Picker (statt Buttons)
+        const courtSvg = App.court.build();
+        document.getElementById('lm-court-wrap').appendChild(courtSvg);
+        App.court.renderZones(courtSvg, 'own', zoneId => {
+          selectedPosition = zoneId;
+          courtSvg.querySelectorAll('.zone-chip').forEach(c => c.classList.toggle('selected', c.dataset.zone === zoneId));
         });
 
         document.getElementById('lm-players')?.addEventListener('click', e => {
@@ -882,11 +904,19 @@ App.views = (function () {
           });
         });
 
+        document.querySelectorAll('.goal-zone-grid .gz-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            selectedGoalZone = btn.dataset.zone;
+            document.querySelectorAll('.goal-zone-grid .gz-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+          });
+        });
+
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const pos = selectedPosition ? App.court.zoneCenterRel(selectedPosition, 'own') : { rx: 0.75, ry: 0.5 };
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
-          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedPosition });
+          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone });
           App.ui.closeModal();
           App.ui.toast('Wurf gespeichert', 'ok');
           refreshScore();
