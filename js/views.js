@@ -878,10 +878,12 @@ App.views = (function () {
         </div>`;
 
       App.ui.openModal('Wurf eintragen', html);
+      document.getElementById('modal-box').classList.add('modal-wide');
 
       setTimeout(() => {
-        // Halbkreis-Spielfeld als Positions-Picker (statt Buttons)
+        // Halbkreis-Spielfeld als Positions-Picker — nur Angriffshälfte zeigen
         const courtSvg = App.court.build();
+        courtSvg.setAttribute('viewBox', '350 0 450 400'); // crop to attack half
         document.getElementById('lm-court-wrap').appendChild(courtSvg);
         App.court.renderZones(courtSvg, 'own', zoneId => {
           selectedPosition = zoneId;
