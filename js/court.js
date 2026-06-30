@@ -266,10 +266,10 @@ App.court = (function () {
 
     ATTACK_ZONES.forEach(z => {
       const cx = side === 'opp' ? VW - z.cx : z.cx;
-      const w = z.label.length > 3 ? 60 : 40, h = 26;
+      const w = z.label.length > 2 ? 72 : 48, h = 36;
       const g = ns('g', { class: `zone-chip${side === 'opp' ? ' opp' : ''}`, 'data-zone': z.id });
-      g.appendChild(ns('rect', { x: cx - w / 2, y: z.cy - h / 2, width: w, height: h, rx: 13, class: 'zone-chip-bg' }));
-      const t = ns('text', { x: cx, y: z.cy + 4, 'text-anchor': 'middle', class: 'zone-chip-label' });
+      g.appendChild(ns('rect', { x: cx - w / 2, y: z.cy - h / 2, width: w, height: h, rx: 14, class: 'zone-chip-bg' }));
+      const t = ns('text', { x: cx, y: z.cy + 5, 'text-anchor': 'middle', class: 'zone-chip-label' });
       t.textContent = z.label;
       g.appendChild(t);
       layer.appendChild(g);

@@ -333,6 +333,7 @@ td .actions { display: flex; gap: 4px; }
   box-shadow: var(--shadow);
   animation: modalIn 0.18s ease;
 }
+.modal-box.modal-wide { max-width: 680px; }
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(12px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -657,7 +658,7 @@ select.form-control { cursor: pointer; }
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 4px;
   margin-bottom: 10px;
 }
 
@@ -818,11 +819,49 @@ select.form-control { cursor: pointer; }
 }
 .zone-chip-label {
   fill: #fff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   font-family: -apple-system, sans-serif;
   pointer-events: none;
 }
+
+/* Zone-Kategorien: farblich unterschieden */
+.zone-chip[data-zone="la"] .zone-chip-bg,
+.zone-chip[data-zone="ra"] .zone-chip-bg {
+  fill: rgba(240,160,0,0.35); stroke: rgba(240,160,0,0.85);
+}
+.zone-chip[data-zone="la"]:hover .zone-chip-bg,
+.zone-chip[data-zone="ra"]:hover .zone-chip-bg {
+  fill: rgba(240,160,0,0.6);
+}
+.zone-chip[data-zone="hld"] .zone-chip-bg,
+.zone-chip[data-zone="md"] .zone-chip-bg,
+.zone-chip[data-zone="hrd"] .zone-chip-bg {
+  fill: rgba(74,127,193,0.45); stroke: rgba(74,127,193,0.9);
+}
+.zone-chip[data-zone="hld"]:hover .zone-chip-bg,
+.zone-chip[data-zone="md"]:hover .zone-chip-bg,
+.zone-chip[data-zone="hrd"]:hover .zone-chip-bg {
+  fill: rgba(74,127,193,0.7);
+}
+.zone-chip[data-zone="hl1"] .zone-chip-bg,
+.zone-chip[data-zone="m1"] .zone-chip-bg,
+.zone-chip[data-zone="hr1"] .zone-chip-bg {
+  fill: rgba(0,195,170,0.35); stroke: rgba(0,195,170,0.85);
+}
+.zone-chip[data-zone="hl1"]:hover .zone-chip-bg,
+.zone-chip[data-zone="m1"]:hover .zone-chip-bg,
+.zone-chip[data-zone="hr1"]:hover .zone-chip-bg {
+  fill: rgba(0,195,170,0.6);
+}
+.zone-chip[data-zone="p7"] .zone-chip-bg {
+  fill: rgba(232,72,85,0.40); stroke: rgba(232,72,85,0.85);
+}
+.zone-chip[data-zone="p7"]:hover .zone-chip-bg { fill: rgba(232,72,85,0.65); }
+.zone-chip[data-zone="km"] .zone-chip-bg {
+  fill: rgba(160,100,220,0.40); stroke: rgba(160,100,220,0.85);
+}
+.zone-chip[data-zone="km"]:hover .zone-chip-bg { fill: rgba(160,100,220,0.65); }
 
 /* ============================================================
    Live — Action button + Recent entries
