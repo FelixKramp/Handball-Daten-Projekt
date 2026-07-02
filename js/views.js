@@ -1,4 +1,4 @@
-// views.js — View-Renderer für alle 4 Seiten
+/// views.js — View-Renderer für alle 4 Seiten
 window.App = window.App || {};
 
 App.views = (function () {
@@ -621,6 +621,18 @@ App.views = (function () {
         <div class="form-group">
           <label>Team-ID</label>
           <input class="form-control" id="f-teamid" value="${team.apiTeamId || ''}" placeholder="123">
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px;">
+        <div class="card-title" style="margin-bottom:6px">Datensicherung</div>
+        <p class="text-muted" style="font-size:12px;margin:0 0 12px">
+          Alle Daten liegen nur in diesem Browser. Lade regelmäßig eine Sicherung herunter —
+          bei Browserwechsel oder gelöschtem Verlauf sind sie sonst weg.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-outline" id="btn-export-data" type="button">Sicherung herunterladen</button>
+          <button class="btn btn-outline" id="btn-import-data" type="button">Sicherung wiederherstellen…</button>
+          <input type="file" id="f-import-file" accept=".json,application/json" style="display:none">
         </div>
       </div>
     `;
