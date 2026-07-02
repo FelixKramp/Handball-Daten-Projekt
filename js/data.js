@@ -335,7 +335,14 @@ App.data = (function () {
     // ── Import / Export ───────────────────────────────────
     exportJSON()  { return JSON.stringify(state, null, 2); },
     importJSON(s) {
-      try { state = JSON.parse(s); persist(state); return true; }
+      try {
+        const parsed = JSON.parse(s);
+        // Nur echte Sicherungen akzeptieren — eine falsche Datei würde die App zerschießen
+        if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.players) || !Array.isArray(parsed.games)) return false;
+        state = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), parsed);
+        persist(state);
+        return true;
+      }
       catch (e) { return false; }
     },
     reset() { state = JSON.parse(JSON.stringify(DEFAULTS)); persist(state); }

@@ -340,6 +340,42 @@ App.ui = (function () {
             closeModal();
             toast('Einstellungen gespeichert', 'ok');
           });
+
+          // Datensicherung: Export als JSON-Download
+          document.getElementById('btn-export-data')?.addEventListener('click', () => {
+            const blob = new Blob([App.data.exportJSON()], { type: 'application/json' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = `handball-sicherung-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast('Sicherung heruntergeladen', 'ok');
+          });
+
+          // Datensicherung: Import aus JSON-Datei
+          const fileInput = document.getElementById('f-import-file');
+          document.getElementById('btn-import-data')?.addEventListener('click', () => fileInput?.click());
+          fileInput?.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            if (!confirm('Aktuelle Daten werden durch die Sicherung ersetzt. Fortfahren?')) {
+              fileInput.value = '';
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (App.data.importJSON(reader.result)) {
+                closeModal();
+                init();
+                toast('Sicherung wiederhergestellt', 'ok');
+              } else {
+                toast('Ungültige Sicherungsdatei', 'err');
+              }
+              fileInput.value = '';
+            };
+            reader.readAsText(file);
+          });
         }, 0);
         break;
       }
