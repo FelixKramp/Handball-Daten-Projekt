@@ -235,17 +235,21 @@ App.court = (function () {
   // Winkel 0° = geradeaus vom Tor, positiv = untere Hälfte (HR/RA), negativ = obere (HL/LA).
   // Radius/Winkel sind für den RECHTEN Torraum (Angriff). Für 'opp' wird nur die
   // x-Richtung gespiegelt (dirSign), Radius/Winkel bleiben identisch.
+  // r1/r2 verwenden bewusst dieselben Konstanten (R6, R9), die auch die 6m-/9m-Linie
+  // zeichnen (siehe drawGoalSide) — die Zonengrenzen liegen dadurch immer exakt auf
+  // den echten Feldlinien, nicht auf frei erfundenen Werten.
   const ATTACK_ZONES = [
-    { id:'km',  label:'Kreis',   r1:55,  r2:120, a1:-48, a2:48 },
+    { id:'km',  label:'Kreis',   r1:18,  r2:R6,  a1:-48, a2:48 },
     { id:'la',  label:'LA',      r1:20,  r2:150, a1:-80, a2:-48 },
-    { id:'hl1', label:'HL 1:1',  r1:120, r2:180, a1:-48, a2:-15 },
-    { id:'m1',  label:'M 1:1',   r1:120, r2:180, a1:-15, a2:15, lr:172 },
-    { id:'hr1', label:'HR 1:1',  r1:120, r2:180, a1:15,  a2:48 },
+    { id:'hl1', label:'HL 1:1',  r1:R6,  r2:R9,  a1:-48, a2:-15 },
+    { id:'m1',  label:'M 1:1',   r1:R6,  r2:R9,  a1:-15, a2:15, lr:155, la:12 },
+    { id:'hr1', label:'HR 1:1',  r1:R6,  r2:R9,  a1:15,  a2:48 },
     { id:'ra',  label:'RA',      r1:20,  r2:150, a1:48,  a2:80 },
-    { id:'hld', label:'HL fern', r1:180, r2:240, a1:-48, a2:-15 },
-    { id:'md',  label:'M fern',  r1:180, r2:240, a1:-15, a2:15 },
-    { id:'hrd', label:'HR fern', r1:180, r2:240, a1:15,  a2:48 },
-    { id:'p7',  label:'7m',      r1:130, r2:150, a1:-10, a2:10 },
+    { id:'hld', label:'HL fern', r1:R9,  r2:240, a1:-48, a2:-15 },
+    { id:'md',  label:'M fern',  r1:R9,  r2:240, a1:-15, a2:15 },
+    { id:'hrd', label:'HR fern', r1:R9,  r2:240, a1:15,  a2:48 },
+    // 7m: kein Wedge, sondern ein kleiner Kreis genau auf der echten 7m-Markierung (R7)
+    { id:'p7',  label:'7m',      shape:'circle', dist:R7, radius:20 },
   ];
 
   const ZONE_LABELS = {
@@ -281,7 +285,9 @@ App.court = (function () {
   function zoneCenterRel(id, side) {
     const z = ATTACK_ZONES.find(z => z.id === id);
     if (!z) return { rx: 0.5, ry: 0.5 };
-    const mid = polarPoint(goalX(side), (z.r1 + z.r2) / 2, (z.a1 + z.a2) / 2, dirSign(side));
+    const mid = z.shape === 'circle'
+      ? polarPoint(goalX(side), z.dist, 0, dirSign(side))
+      : polarPoint(goalX(side), (z.r1 + z.r2) / 2, (z.a1 + z.a2) / 2, dirSign(side));
     return { rx: mid.x / VW, ry: mid.y / VH };
   }
 
@@ -297,8 +303,16 @@ App.court = (function () {
 
     ATTACK_ZONES.forEach(z => {
       const g = ns('g', { class: `zone-chip${side === 'opp' ? ' opp' : ''}`, 'data-zone': z.id });
-      g.appendChild(ns('path', { d: wedgePath(gx, z.r1, z.r2, z.a1, z.a2, dir), class: 'zone-chip-bg' }));
-      const mid = polarPoint(gx, z.lr != null ? z.lr : (z.r1 + z.r2) / 2, (z.a1 + z.a2) / 2, dir);
+      let mid;
+      if (z.shape === 'circle') {
+        mid = polarPoint(gx, z.dist, 0, dir);
+        g.appendChild(ns('circle', { cx: mid.x, cy: mid.y, r: z.radius, class: 'zone-chip-bg' }));
+      } else {
+        g.appendChild(ns('path', { d: wedgePath(gx, z.r1, z.r2, z.a1, z.a2, dir), class: 'zone-chip-bg' }));
+        const labelR = z.lr != null ? z.lr : (z.r1 + z.r2) / 2;
+        const labelA = z.la != null ? z.la : (z.a1 + z.a2) / 2;
+        mid = polarPoint(gx, labelR, labelA, dir);
+      }
       const t = ns('text', { x: mid.x, y: mid.y + 4, 'text-anchor': 'middle', class: 'zone-chip-label' });
       t.textContent = z.label;
       g.appendChild(t);

@@ -874,37 +874,39 @@ App.views = (function () {
           <label>Position (Wurfort)</label>
           <div class="live-court-wrap" id="lm-court-wrap"></div>
         </div>
-        ${players.length > 0 ? `
-        <div class="form-group">
-          <label>Spieler</label>
-          <div class="live-player-grid" id="lm-players">
-            ${players.map(p => `
-              <button class="live-player-btn" data-pid="${p.id}">
-                <span class="pnum">${p.number}</span>
-                <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
-              </button>`).join('')}
+        <div id="lm-below-court">
+          ${players.length > 0 ? `
+          <div class="form-group">
+            <label>Spieler</label>
+            <div class="live-player-grid" id="lm-players">
+              ${players.map(p => `
+                <button class="live-player-btn" data-pid="${p.id}">
+                  <span class="pnum">${p.number}</span>
+                  <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
+                </button>`).join('')}
+            </div>
+          </div>` : ''}
+          ${!presetOutcome ? `
+          <div class="form-group">
+            <label>Ergebnis</label>
+            <div class="outcome-btn-group">
+              <button class="outcome-btn ob-goal"  data-oc="goal">Tor</button>
+              <button class="outcome-btn ob-miss"  data-oc="miss">Fehlschuss</button>
+              <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
+              <button class="outcome-btn ob-post"  data-oc="post">Pfosten</button>
+            </div>
+          </div>` : ''}
+          ${showZone ? `
+          <div class="form-group">
+            <label>Torzone (wohin geworfen, aus eigener Sicht)</label>
+            <div class="goal-zone-grid">
+              ${GOAL_TARGET_ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
+            </div>
+          </div>` : ''}
+          <div class="form-group">
+            <label>Minute</label>
+            <input class="form-control" id="lm-minute" type="number" min="1" max="60" value="${autoMinute || ''}">
           </div>
-        </div>` : ''}
-        ${!presetOutcome ? `
-        <div class="form-group">
-          <label>Ergebnis</label>
-          <div class="outcome-btn-group">
-            <button class="outcome-btn ob-goal"  data-oc="goal">Tor</button>
-            <button class="outcome-btn ob-miss"  data-oc="miss">Fehlschuss</button>
-            <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
-            <button class="outcome-btn ob-post"  data-oc="post">Pfosten</button>
-          </div>
-        </div>` : ''}
-        ${showZone ? `
-        <div class="form-group">
-          <label>Torzone (wohin geworfen, aus eigener Sicht)</label>
-          <div class="goal-zone-grid">
-            ${GOAL_TARGET_ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
-          </div>
-        </div>` : ''}
-        <div class="form-group">
-          <label>Minute</label>
-          <input class="form-control" id="lm-minute" type="number" min="1" max="60" value="${autoMinute || ''}">
         </div>
         <div class="form-actions">
           <button class="btn btn-outline" onclick="App.ui.closeModal()">Abbrechen</button>
@@ -922,6 +924,7 @@ App.views = (function () {
         App.court.renderZones(courtSvg, 'own', zoneId => {
           selectedPosition = zoneId;
           courtSvg.querySelectorAll('.zone-chip').forEach(c => c.classList.toggle('selected', c.dataset.zone === zoneId));
+          document.getElementById('lm-below-court')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
         document.getElementById('lm-players')?.addEventListener('click', e => {
