@@ -229,18 +229,23 @@ App.court = (function () {
   }
 
   // ── Wurfzonen (feste Handball-Positionen) ─────────────────────────
-  // Coordinates are for attacking the RIGHT goal. Defense mirrors across x.
+  // Echte Kreissegmente (wie ein Tortendiagramm) statt schwebender Buttons —
+  // 3 konzentrische Ringe (Kreis / 1:1 / Distanz) × 5 Winkel-Segmente (LA/HL/M/HR/RA),
+  // plus 7m als schmaler Streifen innerhalb des Mitte-1:1-Segments.
+  // Winkel 0° = geradeaus vom Tor, positiv = untere Hälfte (HR/RA), negativ = obere (HL/LA).
+  // Radius/Winkel sind für den RECHTEN Torraum (Angriff). Für 'opp' wird nur die
+  // x-Richtung gespiegelt (dirSign), Radius/Winkel bleiben identisch.
   const ATTACK_ZONES = [
-    { id:'la',  label:'LA',     cx:695, cy:112 },
-    { id:'hld', label:'HL fern',cx:460, cy:135 },
-    { id:'hl1', label:'HL 1:1', cx:560, cy:152 },
-    { id:'md',  label:'M fern', cx:460, cy:200 },
-    { id:'m1',  label:'M 1:1',  cx:565, cy:200 },
-    { id:'p7',  label:'7m',     cx:648, cy:200 },
-    { id:'km',  label:'Kreis',  cx:712, cy:200 },
-    { id:'hr1', label:'HR 1:1', cx:560, cy:248 },
-    { id:'hrd', label:'HR fern',cx:460, cy:265 },
-    { id:'ra',  label:'RA',     cx:695, cy:288 },
+    { id:'km',  label:'Kreis',   r1:55,  r2:120, a1:-48, a2:48 },
+    { id:'la',  label:'LA',      r1:20,  r2:150, a1:-80, a2:-48 },
+    { id:'hl1', label:'HL 1:1',  r1:120, r2:180, a1:-48, a2:-15 },
+    { id:'m1',  label:'M 1:1',   r1:120, r2:180, a1:-15, a2:15, lr:172 },
+    { id:'hr1', label:'HR 1:1',  r1:120, r2:180, a1:15,  a2:48 },
+    { id:'ra',  label:'RA',      r1:20,  r2:150, a1:48,  a2:80 },
+    { id:'hld', label:'HL fern', r1:180, r2:240, a1:-48, a2:-15 },
+    { id:'md',  label:'M fern',  r1:180, r2:240, a1:-15, a2:15 },
+    { id:'hrd', label:'HR fern', r1:180, r2:240, a1:15,  a2:48 },
+    { id:'p7',  label:'7m',      r1:130, r2:150, a1:-10, a2:10 },
   ];
 
   const ZONE_LABELS = {
@@ -250,26 +255,51 @@ App.court = (function () {
     hr1:'Halbrechts 1:1', hrd:'Halbrechts Distanz',
   };
 
+  // Punkt auf einem Kreisbogen um das Tor: dirSign -1 = rechtes Tor (own), +1 = linkes Tor (opp)
+  function polarPoint(gx, r, angleDeg, dirSign) {
+    const th = angleDeg * Math.PI / 180;
+    return { x: gx + dirSign * r * Math.cos(th), y: CY + r * Math.sin(th) };
+  }
+
+  function goalX(side) { return side === 'opp' ? GL : GR; }
+  function dirSign(side) { return side === 'opp' ? 1 : -1; }
+
+  // SVG-Pfad für ein Kreisring-Segment (Torte mit Loch) zwischen r1..r2 und a1..a2
+  function wedgePath(gx, r1, r2, a1, a2, dir) {
+    const pInnerStart = polarPoint(gx, r1, a1, dir);
+    const pOuterStart = polarPoint(gx, r2, a1, dir);
+    const pOuterEnd   = polarPoint(gx, r2, a2, dir);
+    const pInnerEnd   = polarPoint(gx, r1, a2, dir);
+    const sweepOuter = dir === -1 ? 1 : 0;
+    const sweepInner = dir === -1 ? 0 : 1;
+    return `M ${pInnerStart.x} ${pInnerStart.y} L ${pOuterStart.x} ${pOuterStart.y} `
+         + `A ${r2} ${r2} 0 0 ${sweepOuter} ${pOuterEnd.x} ${pOuterEnd.y} `
+         + `L ${pInnerEnd.x} ${pInnerEnd.y} `
+         + `A ${r1} ${r1} 0 0 ${sweepInner} ${pInnerStart.x} ${pInnerStart.y} Z`;
+  }
+
   function zoneCenterRel(id, side) {
     const z = ATTACK_ZONES.find(z => z.id === id);
     if (!z) return { rx: 0.5, ry: 0.5 };
-    const cx = side === 'opp' ? VW - z.cx : z.cx;
-    return { rx: cx / VW, ry: z.cy / VH };
+    const mid = polarPoint(goalX(side), (z.r1 + z.r2) / 2, (z.a1 + z.a2) / 2, dirSign(side));
+    return { rx: mid.x / VW, ry: mid.y / VH };
   }
 
-  // Render clickable zone chips on the court. side: 'own' (right goal) | 'opp' (left, mirrored).
-  // onPick(zoneId, { rx, ry }) is called when a chip is tapped.
+  // Render klickbare Zonen-Segmente auf dem Spielfeld. side: 'own' (rechtes Tor) | 'opp' (linkes Tor).
+  // onPick(zoneId, { rx, ry }) wird beim Antippen eines Segments aufgerufen.
   function renderZones(svg, side, onPick) {
     let layer = svg.querySelector('#zone-layer');
     if (!layer) { layer = ns('g', { id: 'zone-layer' }); svg.appendChild(layer); }
     while (layer.firstChild) layer.removeChild(layer.firstChild);
 
+    const gx = goalX(side);
+    const dir = dirSign(side);
+
     ATTACK_ZONES.forEach(z => {
-      const cx = side === 'opp' ? VW - z.cx : z.cx;
-      const w = z.label.length > 2 ? 72 : 48, h = 36;
       const g = ns('g', { class: `zone-chip${side === 'opp' ? ' opp' : ''}`, 'data-zone': z.id });
-      g.appendChild(ns('rect', { x: cx - w / 2, y: z.cy - h / 2, width: w, height: h, rx: 14, class: 'zone-chip-bg' }));
-      const t = ns('text', { x: cx, y: z.cy + 5, 'text-anchor': 'middle', class: 'zone-chip-label' });
+      g.appendChild(ns('path', { d: wedgePath(gx, z.r1, z.r2, z.a1, z.a2, dir), class: 'zone-chip-bg' }));
+      const mid = polarPoint(gx, z.lr != null ? z.lr : (z.r1 + z.r2) / 2, (z.a1 + z.a2) / 2, dir);
+      const t = ns('text', { x: mid.x, y: mid.y + 4, 'text-anchor': 'middle', class: 'zone-chip-label' });
       t.textContent = z.label;
       g.appendChild(t);
       layer.appendChild(g);
