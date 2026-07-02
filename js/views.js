@@ -875,17 +875,26 @@ App.views = (function () {
           <div class="live-court-wrap" id="lm-court-wrap"></div>
         </div>
         <div id="lm-below-court">
-          ${players.length > 0 ? `
-          <div class="form-group">
-            <label>Spieler</label>
-            <div class="live-player-grid" id="lm-players">
-              ${players.map(p => `
-                <button class="live-player-btn" data-pid="${p.id}">
-                  <span class="pnum">${p.number}</span>
-                  <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
-                </button>`).join('')}
-            </div>
-          </div>` : ''}
+          <div class="lm-2col">
+            ${players.length > 0 ? `
+            <div class="form-group">
+              <label>Spieler</label>
+              <div class="live-player-grid" id="lm-players">
+                ${players.map(p => `
+                  <button class="live-player-btn" data-pid="${p.id}">
+                    <span class="pnum">${p.number}</span>
+                    <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
+                  </button>`).join('')}
+              </div>
+            </div>` : ''}
+            ${showZone ? `
+            <div class="form-group">
+              <label>Torzone (wohin geworfen, aus eigener Sicht)</label>
+              <div class="goal-zone-grid">
+                ${GOAL_TARGET_ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
+              </div>
+            </div>` : ''}
+          </div>
           ${!presetOutcome ? `
           <div class="form-group">
             <label>Ergebnis</label>
@@ -894,13 +903,6 @@ App.views = (function () {
               <button class="outcome-btn ob-miss"  data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
               <button class="outcome-btn ob-post"  data-oc="post">Pfosten</button>
-            </div>
-          </div>` : ''}
-          ${showZone ? `
-          <div class="form-group">
-            <label>Torzone (wohin geworfen, aus eigener Sicht)</label>
-            <div class="goal-zone-grid">
-              ${GOAL_TARGET_ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
             </div>
           </div>` : ''}
           <div class="form-group">
