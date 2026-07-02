@@ -845,18 +845,15 @@ select.form-control { cursor: pointer; }
 }
 .zone-chip.opp:hover .zone-chip-bg,
 .zone-chip.opp:active .zone-chip-bg { fill: rgba(232,72,85,0.42); }
-.zone-chip.selected .zone-chip-bg {
-  fill: rgba(63,185,104,0.55);
-  stroke: #3fb968;
-  stroke-width: 2.5;
-}
 .zone-chip-label {
   fill: #fff;
   font-size: 12px;
   font-weight: 700;
   font-family: -apple-system, sans-serif;
   pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
+.zone-chip[data-zone="p7"] .zone-chip-label { font-size: 9.5px; }
 
 /* Zone-Kategorien: farblich unterschieden */
 .zone-chip[data-zone="la"] .zone-chip-bg,
@@ -895,6 +892,17 @@ select.form-control { cursor: pointer; }
   fill: rgba(160,100,220,0.40); stroke: rgba(160,100,220,0.85);
 }
 .zone-chip[data-zone="km"]:hover .zone-chip-bg { fill: rgba(160,100,220,0.65); }
+
+/* Ausgewählte Zone: deutlich sichtbarer weißer Rahmen + Glow, unabhängig von der Kategorie-Farbe */
+.zone-chip.selected .zone-chip-bg {
+  stroke: #ffffff !important;
+  stroke-width: 4;
+  filter: drop-shadow(0 0 7px rgba(255,255,255,0.9));
+}
+.zone-chip.selected .zone-chip-label {
+  font-size: 13.5px;
+  font-weight: 800;
+}
 
 /* ============================================================
    Live — Quick-Entry panels + Recent entries
