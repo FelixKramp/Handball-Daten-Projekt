@@ -864,25 +864,27 @@ select.form-control { cursor: pointer; }
 .zone-chip[data-zone="km"]:hover .zone-chip-bg { fill: rgba(160,100,220,0.65); }
 
 /* ============================================================
-   Live — Action button + Recent entries
+   Live — Quick-Entry panels + Recent entries
    ============================================================ */
-.live-action-wrap {
-  padding: 16px 16px 8px;
+.live-quick-wrap {
+  margin-bottom: 12px;
 }
-.live-shot-btn {
-  width: 100%;
-  padding: 18px;
-  font-size: 18px;
-  font-weight: 800;
+.live-quick-panel {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  border: none;
-  background: var(--green);
-  color: #fff;
-  cursor: pointer;
-  letter-spacing: 0.3px;
-  transition: opacity 0.15s, transform 0.1s;
+  padding: 12px;
 }
-.live-shot-btn:active { opacity: 0.85; transform: scale(0.98); }
+.live-quick-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.live-quick-panel .outcome-btn-group { gap: 8px; }
+.live-quick-panel .outcome-btn { padding: 14px 8px; font-size: 14px; }
 
 .live-recent-wrap { padding: 8px 16px 16px; }
 .live-recent-header {

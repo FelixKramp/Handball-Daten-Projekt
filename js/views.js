@@ -669,7 +669,6 @@ App.views = (function () {
               <div class="live-opp-row">
                 <button class="live-adj-btn" id="live-own-minus">−</button>
                 <div class="live-score-num live-score-own" id="live-score-own">0</div>
-                <button class="live-adj-btn" id="live-own-plus">+</button>
               </div>
             </div>
             <div class="live-score-sep">:</div>
@@ -678,7 +677,6 @@ App.views = (function () {
               <div class="live-opp-row">
                 <button class="live-adj-btn" id="live-opp-minus">−</button>
                 <div class="live-score-num live-score-opp" id="live-score-opp">0</div>
-                <button class="live-adj-btn" id="live-opp-plus">+</button>
               </div>
             </div>
           </div>
@@ -688,6 +686,27 @@ App.views = (function () {
             <span class="live-timer-display" id="live-timer">0:00</span>
             <button class="live-ctrl-btn live-ctrl-play" id="live-timer-toggle" title="Start / Pause">▶</button>
             <button class="live-ctrl-btn live-ctrl-half" id="live-hz-toggle" title="2. Halbzeit starten">2. HZ</button>
+          </div>
+        </div>
+
+        <div class="live-quick-wrap grid-2">
+          <div class="live-quick-panel">
+            <div class="live-quick-label">Unsere Würfe</div>
+            <div class="outcome-btn-group">
+              <button class="outcome-btn ob-goal"  data-side="own" data-oc="goal">Tor</button>
+              <button class="outcome-btn ob-miss"  data-side="own" data-oc="miss">Fehlschuss</button>
+              <button class="outcome-btn ob-block" data-side="own" data-oc="block">Geblockt</button>
+              <button class="outcome-btn ob-post"  data-side="own" data-oc="post">Pfosten</button>
+            </div>
+          </div>
+          <div class="live-quick-panel">
+            <div class="live-quick-label">Gegner-Würfe</div>
+            <div class="outcome-btn-group">
+              <button class="outcome-btn ob-goal"  data-side="opp" data-oc="goal">Tor</button>
+              <button class="outcome-btn ob-miss"  data-side="opp" data-oc="miss">Fehlschuss</button>
+              <button class="outcome-btn ob-block" data-side="opp" data-oc="block">Geblockt</button>
+              <button class="outcome-btn ob-post"  data-side="opp" data-oc="post">Pfosten</button>
+            </div>
           </div>
         </div>
 
@@ -725,7 +744,7 @@ App.views = (function () {
       const players = App.data.getPlayers();
 
       if (all.length === 0) {
-        host.innerHTML = '<div class="live-recent-empty">Noch keine Einträge — tippe ⚡ oder Gegner + zum Starten</div>';
+        host.innerHTML = '<div class="live-recent-empty">Noch keine Einträge — tippe oben ein Ergebnis zum Starten</div>';
         return;
       }
 
@@ -810,10 +829,7 @@ App.views = (function () {
       refreshScore();
     });
 
-    // Wir + → attack modal · Wir − → letztes Tor rückgängig
-    document.getElementById('live-own-plus').addEventListener('click', () => {
-      openAttackModal(currentGameId, currentMinute());
-    });
+    // Wir − → letztes Tor rückgängig
     document.getElementById('live-own-minus').addEventListener('click', () => {
       const goals = App.data.getShots(currentGameId).filter(s => s.outcome === 'goal');
       if (goals.length === 0) return;
@@ -823,9 +839,12 @@ App.views = (function () {
       App.ui.toast('Letztes Tor rückgängig', 'inf');
     });
 
-    // Gegner + → defense modal; Zähler steigt nur bei gespeichertem Tor
-    document.getElementById('live-opp-plus').addEventListener('click', () => {
-      openDefenseModal(currentGameId, currentMinute());
+    // Quick-Entry: Ergebnis direkt auf dem Hauptbildschirm wählen → Modal öffnet sich mit vorgegebenem Ergebnis
+    document.querySelector('.live-quick-wrap').addEventListener('click', e => {
+      const btn = e.target.closest('.outcome-btn');
+      if (!btn) return;
+      if (btn.dataset.side === 'own') openAttackModal(currentGameId, currentMinute(), btn.dataset.oc);
+      else openDefenseModal(currentGameId, currentMinute(), btn.dataset.oc);
     });
 
     // ── Game select ────────────────────────────────────────────────
@@ -842,12 +861,13 @@ App.views = (function () {
       { id:'bl', label:'UL' }, { id:'bm', label:'UM' }, { id:'br', label:'UR' },
     ];
 
-    function openAttackModal(gameId, autoMinute) {
+    function openAttackModal(gameId, autoMinute, presetOutcome) {
       const players = App.data.getPlayers();
       let selectedPlayerId = null;
-      let selectedOutcome  = null;
+      let selectedOutcome  = presetOutcome || null;
       let selectedPosition = null;
       let selectedGoalZone = null;
+      const showZone = !presetOutcome || presetOutcome === 'goal';
 
       const html = `
         <div class="form-group">
@@ -865,6 +885,7 @@ App.views = (function () {
               </button>`).join('')}
           </div>
         </div>` : ''}
+        ${!presetOutcome ? `
         <div class="form-group">
           <label>Ergebnis</label>
           <div class="outcome-btn-group">
@@ -873,13 +894,14 @@ App.views = (function () {
             <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
             <button class="outcome-btn ob-post"  data-oc="post">Pfosten</button>
           </div>
-        </div>
+        </div>` : ''}
+        ${showZone ? `
         <div class="form-group">
           <label>Torzone (wohin geworfen, aus eigener Sicht)</label>
           <div class="goal-zone-grid">
             ${GOAL_TARGET_ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
           </div>
-        </div>
+        </div>` : ''}
         <div class="form-group">
           <label>Minute</label>
           <input class="form-control" id="lm-minute" type="number" min="1" max="60" value="${autoMinute || ''}">
@@ -889,7 +911,7 @@ App.views = (function () {
           <button class="btn btn-primary" id="lm-save" style="flex:1;padding:10px;font-size:14px">Speichern</button>
         </div>`;
 
-      App.ui.openModal('Wurf eintragen', html);
+      App.ui.openModal(presetOutcome ? `${OC_LABEL[presetOutcome]} eintragen` : 'Wurf eintragen', html);
       document.getElementById('modal-box').classList.add('modal-wide');
 
       setTimeout(() => {
@@ -910,21 +932,25 @@ App.views = (function () {
           btn.classList.add('selected');
         });
 
-        document.querySelectorAll('.outcome-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            selectedOutcome = btn.dataset.oc;
-            document.querySelectorAll('.outcome-btn').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
+        if (!presetOutcome) {
+          document.querySelectorAll('#modal-body .outcome-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              selectedOutcome = btn.dataset.oc;
+              document.querySelectorAll('#modal-body .outcome-btn').forEach(b => b.classList.remove('selected'));
+              btn.classList.add('selected');
+            });
           });
-        });
+        }
 
-        document.querySelectorAll('.goal-zone-grid .gz-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            selectedGoalZone = btn.dataset.zone;
-            document.querySelectorAll('.goal-zone-grid .gz-btn').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
+        if (showZone) {
+          document.querySelectorAll('#modal-body .gz-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              selectedGoalZone = btn.dataset.zone;
+              document.querySelectorAll('#modal-body .gz-btn').forEach(b => b.classList.remove('selected'));
+              btn.classList.add('selected');
+            });
           });
-        });
+        }
 
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
@@ -940,10 +966,11 @@ App.views = (function () {
     }
 
     // ── Defense modal (with opponent roster) ──────────────────────
-    function openDefenseModal(gameId, autoMinute) {
-      let selectedOutcome   = null;
+    function openDefenseModal(gameId, autoMinute, presetOutcome) {
+      let selectedOutcome   = presetOutcome || null;
       let selectedZone      = null;
       let selectedOppPlayer = null;
+      const showZone = !presetOutcome || presetOutcome === 'goal';
 
       const ZONES = [
         { id:'tl', label:'OL' }, { id:'tm', label:'OM' }, { id:'tr', label:'OR' },
@@ -962,6 +989,7 @@ App.views = (function () {
             </div>
           </div>
         </div>
+        ${!presetOutcome ? `
         <div class="form-group">
           <label>Ergebnis</label>
           <div class="outcome-btn-group">
@@ -970,13 +998,14 @@ App.views = (function () {
             <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
             <button class="outcome-btn ob-post"  data-oc="post">Pfosten</button>
           </div>
-        </div>
+        </div>` : ''}
+        ${showZone ? `
         <div class="form-group">
           <label>Torzone (aus Torwart-Sicht)</label>
           <div class="goal-zone-grid">
             ${ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
           </div>
-        </div>
+        </div>` : ''}
         <div class="form-group">
           <label>Minute</label>
           <input class="form-control" id="lm-minute" type="number" min="1" max="60" value="${autoMinute || ''}">
@@ -986,7 +1015,7 @@ App.views = (function () {
           <button class="btn btn-primary" id="lm-save" style="flex:1;padding:10px;font-size:14px">Speichern</button>
         </div>`;
 
-      App.ui.openModal('Gegner-Wurf eintragen', html);
+      App.ui.openModal(presetOutcome ? `Gegner: ${OC_LABEL[presetOutcome]} eintragen` : 'Gegner-Wurf eintragen', html);
 
       setTimeout(() => {
         function buildRosterChips() {
@@ -1022,21 +1051,25 @@ App.views = (function () {
           buildRosterChips();
         });
 
-        document.querySelectorAll('.outcome-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            selectedOutcome = btn.dataset.oc;
-            document.querySelectorAll('.outcome-btn').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
+        if (!presetOutcome) {
+          document.querySelectorAll('#modal-body .outcome-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              selectedOutcome = btn.dataset.oc;
+              document.querySelectorAll('#modal-body .outcome-btn').forEach(b => b.classList.remove('selected'));
+              btn.classList.add('selected');
+            });
           });
-        });
+        }
 
-        document.querySelectorAll('.gz-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            selectedZone = btn.dataset.zone;
-            document.querySelectorAll('.gz-btn').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
+        if (showZone) {
+          document.querySelectorAll('#modal-body .gz-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              selectedZone = btn.dataset.zone;
+              document.querySelectorAll('#modal-body .gz-btn').forEach(b => b.classList.remove('selected'));
+              btn.classList.add('selected');
+            });
           });
-        });
+        }
 
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
