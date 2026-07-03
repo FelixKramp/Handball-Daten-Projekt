@@ -379,8 +379,33 @@ App.ui = (function () {
         }, 0);
         break;
       }
+
+      case 'toggle-theme':
+        toggleTheme();
+        break;
     }
   });
+
+  // ── Theme (Hell/Dunkel) ────────────────────────────────────────────
+  const THEME_KEY = 'hb_theme';
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    const isLight = theme === 'light';
+    const iconDark  = document.getElementById('theme-icon-dark');
+    const iconLight = document.getElementById('theme-icon-light');
+    const label     = document.getElementById('theme-toggle-label');
+    if (iconDark)  iconDark.style.display  = isLight ? 'none' : '';
+    if (iconLight) iconLight.style.display = isLight ? '' : 'none';
+    if (label)     label.textContent = isLight ? 'Dunkler Modus' : 'Heller Modus';
+  }
+
+  function toggleTheme() {
+    const current = localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark';
+    const next = current === 'light' ? 'dark' : 'light';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  }
 
   // ── Init ──────────────────────────────────────────────────────────
   // Persist timer state across view navigation
@@ -390,10 +415,11 @@ App.ui = (function () {
     const team = App.data.getTeam();
     teamNameEl.textContent = team.name;
     seasonEl.textContent   = team.season;
+    applyTheme(localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark');
     navigate('dashboard');
   }
 
-  return { openModal, closeModal, toast, openShotModal, openOpponentShotModal, navigate, init };
+  return { openModal, closeModal, toast, openShotModal, openOpponentShotModal, navigate, init, toggleTheme };
 })();
 
 App.ui.init();
