@@ -719,16 +719,27 @@ select.form-control { cursor: pointer; }
 .ob-block { background: var(--yellow-dim); color: var(--yellow); }
 .ob-post  { background: var(--blue-dim);   color: var(--blue); }
 
-/* Player quick-pick grid */
+/* Spieler + Torzone im Wurf-Modal nebeneinander statt untereinander —
+   eigene Klasse (nicht .grid-2), damit es auch auf dem iPad (≤820px
+   Viewport) zweispaltig bleibt statt wie die Seiten-Grids zu stapeln. */
+.lm-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+@media (max-width: 480px) {
+  .lm-2col { grid-template-columns: 1fr; }
+}
+
+/* Player quick-pick grid — kompaktes Raster wie die Torzonen-Buttons */
 .live-player-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
   gap: 5px;
-  max-height: 150px;
-  overflow-y: auto;
 }
 .live-player-btn {
-  padding: 7px 4px;
+  padding: 5px 3px;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   border: 2px solid transparent;
@@ -740,8 +751,8 @@ select.form-control { cursor: pointer; }
 }
 .live-player-btn:hover { background: var(--surface-3); }
 .live-player-btn.selected { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
-.live-player-btn .pnum { font-size: 18px; font-weight: 900; display: block; }
-.live-player-btn .pname { font-size: 10px; color: var(--text-2); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-player-btn .pnum { font-size: 15px; font-weight: 900; display: block; }
+.live-player-btn .pname { font-size: 8.5px; color: var(--text-2); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Goal zone grid */
 .goal-zone-grid {
@@ -846,18 +857,15 @@ select.form-control { cursor: pointer; }
 }
 .zone-chip.opp:hover .zone-chip-bg,
 .zone-chip.opp:active .zone-chip-bg { fill: rgba(232,72,85,0.42); }
-.zone-chip.selected .zone-chip-bg {
-  fill: rgba(63,185,104,0.55);
-  stroke: #3fb968;
-  stroke-width: 2.5;
-}
 .zone-chip-label {
   fill: #fff;
   font-size: 12px;
   font-weight: 700;
   font-family: -apple-system, sans-serif;
   pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
+.zone-chip[data-zone="p7"] .zone-chip-label { font-size: 9.5px; }
 
 /* Zone-Kategorien: farblich unterschieden */
 .zone-chip[data-zone="la"] .zone-chip-bg,
@@ -896,6 +904,17 @@ select.form-control { cursor: pointer; }
   fill: rgba(160,100,220,0.40); stroke: rgba(160,100,220,0.85);
 }
 .zone-chip[data-zone="km"]:hover .zone-chip-bg { fill: rgba(160,100,220,0.65); }
+
+/* Ausgewählte Zone: deutlich sichtbarer weißer Rahmen + Glow, unabhängig von der Kategorie-Farbe */
+.zone-chip.selected .zone-chip-bg {
+  stroke: #ffffff !important;
+  stroke-width: 4;
+  filter: drop-shadow(0 0 7px rgba(255,255,255,0.9));
+}
+.zone-chip.selected .zone-chip-label {
+  font-size: 13.5px;
+  font-weight: 800;
+}
 
 /* ============================================================
    Live — Quick-Entry panels + Recent entries
@@ -1067,8 +1086,8 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
   .outcome-btn { padding: 15px 8px; font-size: 14px; }
   .goal-zone-grid { max-width: 240px; gap: 6px; }
   .gz-btn { font-size: 13px; }
-  .live-player-grid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; max-height: 200px; }
-  .live-player-btn { padding: 11px 4px; }
+  .live-player-grid { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; }
+  .live-player-btn { padding: 8px 3px; }
   .live-adj-btn { width: 44px; height: 44px; }
   .ri-del { width: 38px; height: 38px; font-size: 20px; }
   .opp-roster-btn, .opp-roster-add { padding: 10px 16px; }
