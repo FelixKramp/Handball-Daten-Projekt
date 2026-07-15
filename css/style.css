@@ -26,6 +26,7 @@
   --sidebar-w:   220px;
   --row-hover:      rgba(255,255,255,0.03);
   --row-hover-soft: rgba(255,255,255,0.02);
+  --font-serif:  'Newsreader', Georgia, 'Times New Roman', serif;
 }
 
 /* Heller Modus — wird per data-Attribut auf <html> umgeschaltet (siehe app.js) */
@@ -176,7 +177,7 @@ body {
   top: 0;
   z-index: 100;
 }
-.page-title { font-size: 18px; font-weight: 700; }
+.page-title { font-size: 20px; font-weight: 600; font-family: var(--font-serif); }
 .topbar-actions { display: flex; gap: 8px; align-items: center; }
 
 .page-content { padding: 28px; flex: 1; }
@@ -377,7 +378,7 @@ td .actions { display: flex; gap: 4px; }
   justify-content: space-between;
   padding: 20px 22px 0;
 }
-.modal-title { font-size: 16px; font-weight: 700; }
+.modal-title { font-size: 18px; font-weight: 600; font-family: var(--font-serif); }
 .modal-close-btn {
   background: none;
   border: none;
@@ -514,7 +515,7 @@ select.form-control { cursor: pointer; }
   padding: 60px 20px;
   color: var(--text-2);
 }
-.empty h3 { font-size: 16px; font-weight: 700; color: var(--text-1); margin-bottom: 6px; }
+.empty h3 { font-size: 18px; font-weight: 600; font-family: var(--font-serif); color: var(--text-1); margin-bottom: 6px; }
 .empty p  { font-size: 13px; margin-bottom: 18px; }
 
 /* ============================================================
