@@ -55,9 +55,9 @@ No new typeface. `--font-serif` (Newsreader, already vendored for headings app-w
 - Outcome tiles and disc targets were sized up further under `@media (pointer: coarse)`, on top of the app's existing coarse-pointer rules — consistent with the confirmed iPad/courtside operating context in `PRODUCT.md`.
 - Outcome color mapping is unchanged from the rest of the app (see Palette above), so colorblind users who've learned the existing green/red/yellow/blue meaning elsewhere in the app aren't taught a second mapping here.
 
-## Known gap — disclose, don't hide
+## Visual verification (closed)
 
-This build's finish review could not run its normal visual pass: no browser automation was available in this session, so no desktop/mobile screenshots were captured and no side-by-side inspection against this contract happened. The mechanical detector (`detect.mjs`) is clean on all changed files — its one finding (a `border-left` side-tab accent on the pre-existing `.toast-ok/.toast-err/.toast-inf` classes, outside the original Spielmodus scope) was fixed at the user's request rather than left as a known gap: toasts now distinguish type with a drawn icon (check/cross/i) instead of a colored side border. **Open item:** verify visually at `http://localhost:5500` (Kader → add a player, Spielplan → add an unplayed game, then Spielmodus) in both light and dark mode, and on a narrow/iPad-width viewport, before treating this as fully finished.
+The finish review's visual pass has since run to completion at `http://localhost:5500`, in both light and dark mode, at desktop (1280px), iPad (768px), and mobile (375px) widths, covering the Spielmodus board and the throw-entry modal (attack path via "Tor", defense path via "Fehlschuss"). Checked: board/frame material and chalk-dust board texture, dashed stamp-tile outcome buttons, scoreboard numerals and halftime tag, the pinned notepad with its own-goal arrow and opponent shield glyphs, the toast confirmation icon, and the court/goal-zone grid inside the modal in both themes. The mechanical detector (`detect.mjs`) remains clean on all changed files. No visual defects found against this contract; nothing outstanding.
 
 ## Extending the world later
 
