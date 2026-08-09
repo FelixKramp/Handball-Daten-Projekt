@@ -655,17 +655,18 @@ App.views = (function () {
     const defaultGame = games.find(g => !g.played) || games[0];
 
     el.innerHTML = `
-      <div class="live-wrap tacboard">
-        <div class="tacboard-frame">
-        <div class="tacboard-board">
-        <div class="live-game-bar tacboard-gamebar">
+      <div class="live-wrap matchform">
+        <div class="matchform-sheet">
+        <div class="matchform-body">
+        <div class="live-game-bar matchform-gamebar">
+          <div class="matchform-field-label">Spiel</div>
           <select class="form-control live-game-select" id="live-game-select">
             ${games.map(g => `<option value="${g.id}" ${g.id === defaultGame.id ? 'selected' : ''}>${dateFmt(g.date)} – ${g.opponent}${g.played ? ' ✓' : ''}</option>`).join('')}
           </select>
         </div>
 
-        <div class="live-header tacboard-scoreboard">
-          <div class="live-score-wrap tacboard-score-wrap">
+        <div class="live-header matchform-scoreboard">
+          <div class="live-score-wrap matchform-score-wrap">
             <div class="live-score-side">
               <div class="live-score-label">Wir</div>
               <div class="live-opp-row">
@@ -683,7 +684,7 @@ App.views = (function () {
             </div>
           </div>
 
-          <div class="live-timer-wrap tacboard-timer-tag">
+          <div class="live-timer-wrap matchform-timer">
             <span class="live-hz-badge" id="live-hz-badge">1. HZ</span>
             <span class="live-timer-display" id="live-timer">0:00</span>
             <button class="live-ctrl-btn live-ctrl-play" id="live-timer-toggle" title="Start / Pause">▶</button>
@@ -691,19 +692,19 @@ App.views = (function () {
           </div>
         </div>
 
-        <div class="live-quick-wrap grid-2 tacboard-outcomes">
-          <div class="live-quick-panel tacboard-panel">
-            <div class="live-quick-label tacboard-panel-label">Unsere Würfe</div>
-            <div class="outcome-btn-group tacboard-stamp-group">
+        <div class="live-quick-wrap grid-2 matchform-outcomes">
+          <div class="live-quick-panel matchform-panel">
+            <div class="live-quick-label matchform-panel-label">Unsere Würfe</div>
+            <div class="outcome-btn-group matchform-check-group">
               <button class="outcome-btn ob-goal"  data-side="own" data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-side="own" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="own" data-oc="block">Geblockt</button>
               <button class="outcome-btn ob-post"  data-side="own" data-oc="post">Pfosten</button>
             </div>
           </div>
-          <div class="live-quick-panel tacboard-panel">
-            <div class="live-quick-label tacboard-panel-label">Gegner-Würfe</div>
-            <div class="outcome-btn-group tacboard-stamp-group">
+          <div class="live-quick-panel matchform-panel">
+            <div class="live-quick-label matchform-panel-label">Gegner-Würfe</div>
+            <div class="outcome-btn-group matchform-check-group">
               <button class="outcome-btn ob-goal"  data-side="opp" data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-side="opp" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="opp" data-oc="block">Geblockt</button>
@@ -712,7 +713,7 @@ App.views = (function () {
           </div>
         </div>
 
-        <div id="live-recent-wrap" class="live-recent-wrap tacboard-notepad">
+        <div id="live-recent-wrap" class="live-recent-wrap matchform-log">
           <div id="live-recent"></div>
         </div>
         </div>
@@ -728,13 +729,13 @@ App.views = (function () {
       return ts.timerSeconds > 0 ? Math.max(1, Math.ceil(ts.timerSeconds / 60)) : null;
     }
 
-    // Kurzer "Kreide-Pop" beim Zahlenwechsel — Klasse neu antriggern statt nur setzen,
-    // sonst spielt die CSS-Animation nur beim allerersten Hinzufügen.
+    // Kurzer "Stempel"-Effekt beim Zahlenwechsel — Klasse neu antriggern statt nur
+    // setzen, sonst spielt die CSS-Animation nur beim allerersten Hinzufügen.
     function popNumber(el) {
       if (!el) return;
-      el.classList.remove('chalk-pop');
+      el.classList.remove('form-stamp');
       void el.offsetWidth;
-      el.classList.add('chalk-pop');
+      el.classList.add('form-stamp');
     }
 
     function refreshScore() {
@@ -744,24 +745,6 @@ App.views = (function () {
       const oppEl = document.getElementById('live-score-opp');
       if (ownEl && ownEl.textContent !== String(ownGoals)) { ownEl.textContent = ownGoals; popNumber(ownEl); }
       if (oppEl && oppEl.textContent !== String(oppGoals)) { oppEl.textContent = oppGoals; popNumber(oppEl); }
-    }
-
-    // Kreidestaub-Effekt bei eigenem Tor — nur dieses eine Ereignis, damit
-    // Tempo bei der Live-Erfassung nicht durch Bewegung auf jedem Tap leidet.
-    function burstChalkDust() {
-      const host = document.querySelector('.live-score-own')?.closest('.live-score-side');
-      if (!host) return;
-      for (let i = 0; i < 6; i++) {
-        const p = document.createElement('span');
-        p.className = 'chalk-dust-particle';
-        const angle = (Math.random() * 140 - 70) * Math.PI / 180;
-        const dist  = 20 + Math.random() * 18;
-        p.style.setProperty('--dust-end', `translate(${Math.round(Math.sin(angle) * dist)}px, ${Math.round(-Math.cos(angle) * dist)}px)`);
-        p.style.left = '50%';
-        p.style.top  = '10%';
-        host.appendChild(p);
-        p.addEventListener('animationend', () => p.remove());
-      }
     }
 
     const OC_LABEL = { goal: 'Tor', miss: 'Fehlschuss', block: 'Geblockt', post: 'Pfosten' };
@@ -775,6 +758,7 @@ App.views = (function () {
       if (!host) return;
       const ownShots = App.data.getShots(currentGameId).map(s => ({ ...s, side: 'own' }));
       const oppShots = App.data.getOpponentShots(currentGameId).map(s => ({ ...s, side: 'opp' }));
+      const totalCount = ownShots.length + oppShots.length;
       const all = [...ownShots, ...oppShots].sort((a, b) => b.id - a.id).slice(0, 6);
       const players = App.data.getPlayers();
 
@@ -784,8 +768,8 @@ App.views = (function () {
       }
 
       host.innerHTML = `
-        <div class="live-recent-header">Letzte Einträge</div>
-        ${all.map(s => {
+        <div class="live-recent-header">Protokoll</div>
+        ${all.map((s, i) => {
           const player = s.side === 'own' ? players.find(p => p.id === s.playerId) : null;
           const who = s.side === 'own'
             ? (player ? `#${player.number} ${player.name.split(' ')[0]}` : '–')
@@ -793,6 +777,7 @@ App.views = (function () {
           const posLabel = s.position ? ` · ${App.court.ZONE_LABELS[s.position] || s.position}` : '';
           const minLabel = s.minute ? `, ${s.minute}'` : '';
           return `<div class="live-recent-item">
+            <span class="ri-num">${totalCount - i}</span>
             <span class="ri-icon ${s.side === 'own' ? 'ri-own' : 'ri-opp'}">${s.side === 'own' ? RI_ICON.own : RI_ICON.opp}</span>
             <span class="ri-text">${who} — <strong>${OC_LABEL[s.outcome] || s.outcome}</strong>${posLabel}${minLabel}</span>
             <button class="ri-del" data-del-id="${s.id}" data-del-side="${s.side}">×</button>
@@ -952,7 +937,7 @@ App.views = (function () {
         </div>`;
 
       App.ui.openModal(presetOutcome ? `${OC_LABEL[presetOutcome]} eintragen` : 'Wurf eintragen', html);
-      document.getElementById('modal-box').classList.add('modal-wide', 'modal-tacboard');
+      document.getElementById('modal-box').classList.add('modal-wide', 'modal-matchform');
 
       setTimeout(() => {
         // Halbkreis-Spielfeld als Positions-Picker — nur Angriffshälfte zeigen
@@ -1003,7 +988,6 @@ App.views = (function () {
           App.ui.toast('Wurf gespeichert', 'ok');
           refreshScore();
           refreshRecent();
-          if (selectedOutcome === 'goal') burstChalkDust();
         });
       }, 0);
     }
@@ -1065,7 +1049,7 @@ App.views = (function () {
         </div>`;
 
       App.ui.openModal(presetOutcome ? `Gegner: ${OC_LABEL[presetOutcome]} eintragen` : 'Gegner-Wurf eintragen', html);
-      document.getElementById('modal-box').classList.add('modal-wide', 'modal-tacboard');
+      document.getElementById('modal-box').classList.add('modal-wide', 'modal-matchform');
 
       setTimeout(() => {
         // Halbkreis-Spielfeld als Positions-Picker — nur die Hälfte vor unserem Tor zeigen

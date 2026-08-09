@@ -29,7 +29,7 @@ App.ui = (function () {
 
   function closeModal() {
     backdrop.classList.remove('open');
-    modalBox.classList.remove('modal-wide', 'modal-tacboard');
+    modalBox.classList.remove('modal-wide', 'modal-matchform');
     delete modalBox._saveHandler;
   }
 
