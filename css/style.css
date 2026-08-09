@@ -489,6 +489,9 @@ select.form-control { cursor: pointer; }
   pointer-events: none;
 }
 .toast {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   background: var(--surface-2);
   border: 1px solid var(--border-2);
   border-radius: var(--radius-sm);
@@ -499,9 +502,11 @@ select.form-control { cursor: pointer; }
   animation: toastIn 0.2s ease;
   max-width: 280px;
 }
-.toast-ok  { border-left: 3px solid var(--green); }
-.toast-err { border-left: 3px solid var(--accent); }
-.toast-inf { border-left: 3px solid var(--blue); }
+.toast-icon { flex-shrink: 0; width: 16px; height: 16px; }
+.toast-icon svg { width: 100%; height: 100%; }
+.toast-ok  .toast-icon { color: var(--green); }
+.toast-err .toast-icon { color: var(--accent); }
+.toast-inf .toast-icon { color: var(--blue); }
 @keyframes toastIn {
   from { transform: translateX(30px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }

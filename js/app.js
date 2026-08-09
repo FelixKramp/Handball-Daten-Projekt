@@ -39,10 +39,23 @@ App.ui = (function () {
   // ── Toast ─────────────────────────────────────────────────────────
   const toastArea = document.getElementById('toast-area');
 
+  // Gezeichnete Icons statt Farbrahmen — hält Toasts konsistent mit dem
+  // Rest der App, wo Bedeutung nie allein über eine Randfarbe läuft.
+  const TOAST_ICON = {
+    ok:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 6.5 12 13 4"/></svg>',
+    err: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+    inf: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v4M8 5.1h.01"/></svg>'
+  };
+
   function toast(msg, type = 'inf') {
     const t = document.createElement('div');
     t.className = `toast toast-${type}`;
-    t.textContent = msg;
+    const icon = document.createElement('span');
+    icon.className = 'toast-icon';
+    icon.innerHTML = TOAST_ICON[type] || TOAST_ICON.inf; // statische, vertrauenswürdige Icon-Tabelle — kein Nutzerinput
+    const text = document.createElement('span');
+    text.textContent = msg; // Nachricht bleibt über textContent sicher, auch bei API-Fehlermeldungen
+    t.append(icon, text);
     toastArea.appendChild(t);
     setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 350); }, 2500);
   }
