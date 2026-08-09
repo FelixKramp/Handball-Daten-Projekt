@@ -90,13 +90,16 @@ App.court = (function () {
     svg.appendChild(ns('line', { x1: gx, y1: gy1, x2: gx, y2: gy2, stroke: line, 'stroke-width': 2.5 }));
   }
 
-  // Convert SVG click coordinates to relative court position (0..1)
+  // Convert SVG click coordinates to relative court position (0..1).
+  // Liest die tatsächliche viewBox statt VW/VH anzunehmen, weil die Live-Modals
+  // das Feld zugeschnitten anzeigen (nur die Angriffs- bzw. Verteidigungshälfte).
   function svgToRelative(svg, clientX, clientY) {
     const rect = svg.getBoundingClientRect();
-    const scaleX = VW / rect.width;
-    const scaleY = VH / rect.height;
-    const x = (clientX - rect.left) * scaleX;
-    const y = (clientY - rect.top)  * scaleY;
+    const vb = svg.viewBox.baseVal;
+    const scaleX = vb.width / rect.width;
+    const scaleY = vb.height / rect.height;
+    const x = vb.x + (clientX - rect.left) * scaleX;
+    const y = vb.y + (clientY - rect.top)  * scaleY;
     return { rx: x / VW, ry: y / VH };
   }
 
@@ -351,7 +354,9 @@ App.court = (function () {
       svg._zoneHandler = e => {
         const chip = e.target.closest('.zone-chip');
         if (!chip || !svg._zonePick) return;
-        svg._zonePick(chip.dataset.zone, zoneCenterRel(chip.dataset.zone, svg._zoneSide));
+        // Echte Tap-Position statt Zonen-Mitte — macht die Heatmap innerhalb einer
+        // Zone aussagekräftig statt alle Würfe exakt übereinanderzulegen.
+        svg._zonePick(chip.dataset.zone, svgToRelative(svg, e.clientX, e.clientY));
       };
       svg.addEventListener('click', svg._zoneHandler);
     }
