@@ -655,15 +655,17 @@ App.views = (function () {
     const defaultGame = games.find(g => !g.played) || games[0];
 
     el.innerHTML = `
-      <div class="live-wrap">
-        <div class="live-game-bar">
+      <div class="live-wrap tacboard">
+        <div class="tacboard-frame">
+        <div class="tacboard-board">
+        <div class="live-game-bar tacboard-gamebar">
           <select class="form-control live-game-select" id="live-game-select">
             ${games.map(g => `<option value="${g.id}" ${g.id === defaultGame.id ? 'selected' : ''}>${dateFmt(g.date)} – ${g.opponent}${g.played ? ' ✓' : ''}</option>`).join('')}
           </select>
         </div>
 
-        <div class="live-header">
-          <div class="live-score-wrap">
+        <div class="live-header tacboard-scoreboard">
+          <div class="live-score-wrap tacboard-score-wrap">
             <div class="live-score-side">
               <div class="live-score-label">Wir</div>
               <div class="live-opp-row">
@@ -681,7 +683,7 @@ App.views = (function () {
             </div>
           </div>
 
-          <div class="live-timer-wrap">
+          <div class="live-timer-wrap tacboard-timer-tag">
             <span class="live-hz-badge" id="live-hz-badge">1. HZ</span>
             <span class="live-timer-display" id="live-timer">0:00</span>
             <button class="live-ctrl-btn live-ctrl-play" id="live-timer-toggle" title="Start / Pause">▶</button>
@@ -689,19 +691,19 @@ App.views = (function () {
           </div>
         </div>
 
-        <div class="live-quick-wrap grid-2">
-          <div class="live-quick-panel">
-            <div class="live-quick-label">Unsere Würfe</div>
-            <div class="outcome-btn-group">
+        <div class="live-quick-wrap grid-2 tacboard-outcomes">
+          <div class="live-quick-panel tacboard-panel">
+            <div class="live-quick-label tacboard-panel-label">Unsere Würfe</div>
+            <div class="outcome-btn-group tacboard-stamp-group">
               <button class="outcome-btn ob-goal"  data-side="own" data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-side="own" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="own" data-oc="block">Geblockt</button>
               <button class="outcome-btn ob-post"  data-side="own" data-oc="post">Pfosten</button>
             </div>
           </div>
-          <div class="live-quick-panel">
-            <div class="live-quick-label">Gegner-Würfe</div>
-            <div class="outcome-btn-group">
+          <div class="live-quick-panel tacboard-panel">
+            <div class="live-quick-label tacboard-panel-label">Gegner-Würfe</div>
+            <div class="outcome-btn-group tacboard-stamp-group">
               <button class="outcome-btn ob-goal"  data-side="opp" data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-side="opp" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="opp" data-oc="block">Geblockt</button>
@@ -710,8 +712,10 @@ App.views = (function () {
           </div>
         </div>
 
-        <div id="live-recent-wrap" class="live-recent-wrap">
+        <div id="live-recent-wrap" class="live-recent-wrap tacboard-notepad">
           <div id="live-recent"></div>
+        </div>
+        </div>
         </div>
       </div>
     `;
@@ -724,16 +728,47 @@ App.views = (function () {
       return ts.timerSeconds > 0 ? Math.max(1, Math.ceil(ts.timerSeconds / 60)) : null;
     }
 
+    // Kurzer "Kreide-Pop" beim Zahlenwechsel — Klasse neu antriggern statt nur setzen,
+    // sonst spielt die CSS-Animation nur beim allerersten Hinzufügen.
+    function popNumber(el) {
+      if (!el) return;
+      el.classList.remove('chalk-pop');
+      void el.offsetWidth;
+      el.classList.add('chalk-pop');
+    }
+
     function refreshScore() {
       const ownGoals = App.data.getShots(currentGameId).filter(s => s.outcome === 'goal').length;
       const oppGoals = App.data.getLiveGoalsAgainst(currentGameId);
       const ownEl = document.getElementById('live-score-own');
       const oppEl = document.getElementById('live-score-opp');
-      if (ownEl) ownEl.textContent = ownGoals;
-      if (oppEl) oppEl.textContent = oppGoals;
+      if (ownEl && ownEl.textContent !== String(ownGoals)) { ownEl.textContent = ownGoals; popNumber(ownEl); }
+      if (oppEl && oppEl.textContent !== String(oppGoals)) { oppEl.textContent = oppGoals; popNumber(oppEl); }
+    }
+
+    // Kreidestaub-Effekt bei eigenem Tor — nur dieses eine Ereignis, damit
+    // Tempo bei der Live-Erfassung nicht durch Bewegung auf jedem Tap leidet.
+    function burstChalkDust() {
+      const host = document.querySelector('.live-score-own')?.closest('.live-score-side');
+      if (!host) return;
+      for (let i = 0; i < 6; i++) {
+        const p = document.createElement('span');
+        p.className = 'chalk-dust-particle';
+        const angle = (Math.random() * 140 - 70) * Math.PI / 180;
+        const dist  = 20 + Math.random() * 18;
+        p.style.setProperty('--dust-end', `translate(${Math.round(Math.sin(angle) * dist)}px, ${Math.round(-Math.cos(angle) * dist)}px)`);
+        p.style.left = '50%';
+        p.style.top  = '10%';
+        host.appendChild(p);
+        p.addEventListener('animationend', () => p.remove());
+      }
     }
 
     const OC_LABEL = { goal: 'Tor', miss: 'Fehlschuss', block: 'Geblockt', post: 'Pfosten' };
+    const RI_ICON = {
+      own: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h9M7 4l4 4-4 4"/></svg>',
+      opp: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5 14 4v4.2c0 4-2.6 6.6-6 7.3-3.4-.7-6-3.3-6-7.3V4z"/></svg>'
+    };
 
     function refreshRecent() {
       const host = document.getElementById('live-recent');
@@ -758,7 +793,7 @@ App.views = (function () {
           const posLabel = s.position ? ` · ${App.court.ZONE_LABELS[s.position] || s.position}` : '';
           const minLabel = s.minute ? `, ${s.minute}'` : '';
           return `<div class="live-recent-item">
-            <span class="ri-icon ${s.side === 'own' ? 'ri-own' : 'ri-opp'}">${s.side === 'own' ? '⚡' : '🛡'}</span>
+            <span class="ri-icon ${s.side === 'own' ? 'ri-own' : 'ri-opp'}">${s.side === 'own' ? RI_ICON.own : RI_ICON.opp}</span>
             <span class="ri-text">${who} — <strong>${OC_LABEL[s.outcome] || s.outcome}</strong>${posLabel}${minLabel}</span>
             <button class="ri-del" data-del-id="${s.id}" data-del-side="${s.side}">×</button>
           </div>`;
@@ -917,7 +952,7 @@ App.views = (function () {
         </div>`;
 
       App.ui.openModal(presetOutcome ? `${OC_LABEL[presetOutcome]} eintragen` : 'Wurf eintragen', html);
-      document.getElementById('modal-box').classList.add('modal-wide');
+      document.getElementById('modal-box').classList.add('modal-wide', 'modal-tacboard');
 
       setTimeout(() => {
         // Halbkreis-Spielfeld als Positions-Picker — nur Angriffshälfte zeigen
@@ -968,6 +1003,7 @@ App.views = (function () {
           App.ui.toast('Wurf gespeichert', 'ok');
           refreshScore();
           refreshRecent();
+          if (selectedOutcome === 'goal') burstChalkDust();
         });
       }, 0);
     }
@@ -1029,7 +1065,7 @@ App.views = (function () {
         </div>`;
 
       App.ui.openModal(presetOutcome ? `Gegner: ${OC_LABEL[presetOutcome]} eintragen` : 'Gegner-Wurf eintragen', html);
-      document.getElementById('modal-box').classList.add('modal-wide');
+      document.getElementById('modal-box').classList.add('modal-wide', 'modal-tacboard');
 
       setTimeout(() => {
         // Halbkreis-Spielfeld als Positions-Picker — nur die Hälfte vor unserem Tor zeigen
