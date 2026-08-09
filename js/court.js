@@ -229,27 +229,43 @@ App.court = (function () {
   }
 
   // ── Wurfzonen (feste Handball-Positionen) ─────────────────────────
-  // Echte Kreissegmente (wie ein Tortendiagramm) statt schwebender Buttons —
-  // 3 konzentrische Ringe (Kreis / 1:1 / Distanz) × 5 Winkel-Segmente (LA/HL/M/HR/RA),
-  // plus 7m als schmaler Streifen innerhalb des Mitte-1:1-Segments.
+  // Echte Kreissegmente (wie ein Tortendiagramm) statt schwebender Buttons.
   // Winkel 0° = geradeaus vom Tor, positiv = untere Hälfte (HR/RA), negativ = obere (HL/LA).
   // Radius/Winkel sind für den RECHTEN Torraum (Angriff). Für 'opp' wird nur die
   // x-Richtung gespiegelt (dirSign), Radius/Winkel bleiben identisch.
-  // r1/r2 verwenden bewusst dieselben Konstanten (R6, R9), die auch die 6m-/9m-Linie
-  // zeichnen (siehe drawGoalSide) — die Zonengrenzen liegen dadurch immer exakt auf
-  // den echten Feldlinien, nicht auf frei erfundenen Werten.
+  //
+  // Die Ringgrenzen sind an dieselben Konstanten gebunden, die auch die Linien
+  // zeichnen (R6 = 6m, R9 = 9m, R7 = 7m-Punkt — siehe drawGoalSide). Dadurch liegen
+  // die Zonengrenzen exakt auf den gezeichneten Linien:
+  //   Kreis (Mitte):        6m-Linie  →  KM_OUT
+  //   1:1 (Mitte):          KM_OUT    →  9m-Linie
+  //   Distanz/"fern":       9m-Linie  →  FERN_OUT
+  //   Außen (LA/RA):        6m-Linie  →  9m-Linie  (volle Tiefe — in diesem
+  //                         Winkelbereich gibt es keine 1:1-/Distanzposition)
+  // Innerhalb der 6m-Linie liegt bewusst KEINE Zone: der Torraum ist Sperrzone,
+  // von dort kann kein Feldspieler werfen.
+  const KM_OUT   = R6 + 30;   // Grenze Kreis ↔ 1:1 (mittig zwischen 6m und 9m)
+  const FERN_OUT = R9 + 62;   // äußere Kante der Distanzzonen
+
   const ATTACK_ZONES = [
-    { id:'km',  label:'Kreis',   r1:18,  r2:R6,  a1:-48, a2:48 },
-    { id:'la',  label:'LA',      r1:20,  r2:150, a1:-80, a2:-48 },
-    { id:'hl1', label:'HL 1:1',  r1:R6,  r2:R9,  a1:-48, a2:-15 },
-    { id:'m1',  label:'M 1:1',   r1:R6,  r2:R9,  a1:-15, a2:15, lr:155, la:12 },
-    { id:'hr1', label:'HR 1:1',  r1:R6,  r2:R9,  a1:15,  a2:48 },
-    { id:'ra',  label:'RA',      r1:20,  r2:150, a1:48,  a2:80 },
-    { id:'hld', label:'HL fern', r1:R9,  r2:240, a1:-48, a2:-15 },
-    { id:'md',  label:'M fern',  r1:R9,  r2:240, a1:-15, a2:15 },
-    { id:'hrd', label:'HR fern', r1:R9,  r2:240, a1:15,  a2:48 },
-    // 7m: kein Wedge, sondern ein kleiner Kreis genau auf der echten 7m-Markierung (R7)
-    { id:'p7',  label:'7m',      shape:'circle', dist:R7, radius:20 },
+    // Außen — volle Tiefe von der 6m- bis zur 9m-Linie
+    { id:'la',  label:'LA',      r1:R6,     r2:R9,       a1:-78, a2:-48 },
+    { id:'ra',  label:'RA',      r1:R6,     r2:R9,       a1:48,  a2:78 },
+    // Kreis — schmales Band direkt außen an der 6m-Linie.
+    // Label sitzt außermittig, weil die Segmentmitte vom 7m-Punkt belegt ist.
+    { id:'km',  label:'Kreis',   r1:R6,     r2:KM_OUT,   a1:-48, a2:48, labelAngle:33 },
+    // 1:1 — zwischen Kreis-Band und 9m-Linie
+    { id:'hl1', label:'HL 1:1',  r1:KM_OUT, r2:R9,       a1:-48, a2:-16 },
+    // Label leicht nach oben versetzt, sonst überlappt es den 7m-Punkt darunter.
+    { id:'m1',  label:'M 1:1',   r1:KM_OUT, r2:R9,       a1:-16, a2:16, labelAngle:-11 },
+    { id:'hr1', label:'HR 1:1',  r1:KM_OUT, r2:R9,       a1:16,  a2:48 },
+    // Distanz — jenseits der 9m-Linie
+    { id:'hld', label:'HL fern', r1:R9,     r2:FERN_OUT, a1:-48, a2:-16 },
+    { id:'md',  label:'M fern',  r1:R9,     r2:FERN_OUT, a1:-16, a2:16 },
+    { id:'hrd', label:'HR fern', r1:R9,     r2:FERN_OUT, a1:16,  a2:48 },
+    // 7m: kein Wedge, sondern ein kleiner Kreis exakt auf der gezeichneten 7m-Markierung.
+    // Steht zuletzt im Array = wird oben drauf gezeichnet und gewinnt damit den Klick.
+    { id:'p7',  label:'7m',      shape:'circle', dist:R7, radius:15 },
   ];
 
   const ZONE_LABELS = {
@@ -269,13 +285,21 @@ App.court = (function () {
   function dirSign(side) { return side === 'opp' ? 1 : -1; }
 
   // SVG-Pfad für ein Kreisring-Segment (Torte mit Loch) zwischen r1..r2 und a1..a2
+  //
+  // Zu den sweep-Flags: Bei zwei Endpunkten und gegebenem Radius gibt es zwei mögliche
+  // Kreismittelpunkte. Nur die richtige Flag-Kombination wählt den Bogen um das Tor —
+  // die andere wölbt sich um einen Ersatzmittelpunkt und schneidet das Segment auf.
+  // Für dir=-1 (rechtes Tor) gilt x = gx - r·cos(a), also θ = 180° − a: wächst a,
+  // sinkt θ, der Außenbogen läuft demnach in negativer Winkelrichtung (sweep 0).
+  // Der Innenbogen läuft zurück und damit umgekehrt (sweep 1). Für dir=+1 ist θ = a
+  // und beide Flags drehen sich um.
   function wedgePath(gx, r1, r2, a1, a2, dir) {
     const pInnerStart = polarPoint(gx, r1, a1, dir);
     const pOuterStart = polarPoint(gx, r2, a1, dir);
     const pOuterEnd   = polarPoint(gx, r2, a2, dir);
     const pInnerEnd   = polarPoint(gx, r1, a2, dir);
-    const sweepOuter = dir === -1 ? 1 : 0;
-    const sweepInner = dir === -1 ? 0 : 1;
+    const sweepOuter = dir === -1 ? 0 : 1;
+    const sweepInner = dir === -1 ? 1 : 0;
     return `M ${pInnerStart.x} ${pInnerStart.y} L ${pOuterStart.x} ${pOuterStart.y} `
          + `A ${r2} ${r2} 0 0 ${sweepOuter} ${pOuterEnd.x} ${pOuterEnd.y} `
          + `L ${pInnerEnd.x} ${pInnerEnd.y} `
@@ -309,8 +333,10 @@ App.court = (function () {
         g.appendChild(ns('circle', { cx: mid.x, cy: mid.y, r: z.radius, class: 'zone-chip-bg' }));
       } else {
         g.appendChild(ns('path', { d: wedgePath(gx, z.r1, z.r2, z.a1, z.a2, dir), class: 'zone-chip-bg' }));
-        const labelR = z.lr != null ? z.lr : (z.r1 + z.r2) / 2;
-        const labelA = z.la != null ? z.la : (z.a1 + z.a2) / 2;
+        // Beschriftung standardmäßig in die Mitte des Segments; labelAngle/labelRadius
+        // erlauben Ausnahmen, wo die Mitte belegt ist (z.B. Kreis wegen des 7m-Punkts).
+        const labelR = z.labelRadius != null ? z.labelRadius : (z.r1 + z.r2) / 2;
+        const labelA = z.labelAngle  != null ? z.labelAngle  : (z.a1 + z.a2) / 2;
         mid = polarPoint(gx, labelR, labelA, dir);
       }
       const t = ns('text', { x: mid.x, y: mid.y + 4, 'text-anchor': 'middle', class: 'zone-chip-label' });
