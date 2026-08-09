@@ -57,7 +57,7 @@ No new typeface. `--font-serif` (Newsreader, already vendored for headings app-w
 
 ## Known gap — disclose, don't hide
 
-This build's finish review could not run its normal visual pass: no browser automation was available in this session, so no desktop/mobile screenshots were captured and no side-by-side inspection against this contract happened. The mechanical detector (`detect.mjs`) was run on the changed CSS/HTML and is clean (the one remaining flagged item, side-tab borders on `.toast-ok/.toast-err/.toast-inf`, predates this change and is outside the Spielmodus scope). **Open item:** verify visually at `http://localhost:5500` (Kader → add a player, Spielplan → add an unplayed game, then Spielmodus) in both light and dark mode, and on a narrow/iPad-width viewport, before treating this as fully finished.
+This build's finish review could not run its normal visual pass: no browser automation was available in this session, so no desktop/mobile screenshots were captured and no side-by-side inspection against this contract happened. The mechanical detector (`detect.mjs`) is clean on all changed files — its one finding (a `border-left` side-tab accent on the pre-existing `.toast-ok/.toast-err/.toast-inf` classes, outside the original Spielmodus scope) was fixed at the user's request rather than left as a known gap: toasts now distinguish type with a drawn icon (check/cross/i) instead of a colored side border. **Open item:** verify visually at `http://localhost:5500` (Kader → add a player, Spielplan → add an unplayed game, then Spielmodus) in both light and dark mode, and on a narrow/iPad-width viewport, before treating this as fully finished.
 
 ## Extending the world later
 
