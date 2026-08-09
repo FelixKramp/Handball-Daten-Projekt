@@ -866,6 +866,7 @@ App.views = (function () {
       let selectedPlayerId = null;
       let selectedOutcome  = presetOutcome || null;
       let selectedPosition = null;
+      let selectedPos      = null;
       let selectedGoalZone = null;
       const showZone = !presetOutcome || presetOutcome === 'goal';
 
@@ -923,8 +924,9 @@ App.views = (function () {
         const courtSvg = App.court.build();
         courtSvg.setAttribute('viewBox', '350 0 450 400'); // crop to attack half
         document.getElementById('lm-court-wrap').appendChild(courtSvg);
-        App.court.renderZones(courtSvg, 'own', zoneId => {
+        App.court.renderZones(courtSvg, 'own', (zoneId, pos) => {
           selectedPosition = zoneId;
+          selectedPos = pos;
           courtSvg.querySelectorAll('.zone-chip').forEach(c => c.classList.toggle('selected', c.dataset.zone === zoneId));
           document.getElementById('lm-below-court')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
@@ -959,7 +961,7 @@ App.views = (function () {
 
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
-          const pos = selectedPosition ? App.court.zoneCenterRel(selectedPosition, 'own') : { rx: 0.75, ry: 0.5 };
+          const pos = selectedPos || { rx: 0.75, ry: 0.5 };
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
           App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone });
           App.ui.closeModal();
@@ -975,6 +977,8 @@ App.views = (function () {
       let selectedOutcome   = presetOutcome || null;
       let selectedZone      = null;
       let selectedOppPlayer = null;
+      let selectedOppPosition = null;
+      let selectedOppPos      = null;
       const showZone = !presetOutcome || presetOutcome === 'goal';
 
       const ZONES = [
@@ -984,6 +988,10 @@ App.views = (function () {
       ];
 
       const html = `
+        <div class="form-group">
+          <label>Position (Wurfort)</label>
+          <div class="live-court-wrap" id="lm-court-wrap"></div>
+        </div>
         <div class="form-group">
           <label>Gegner-Spieler</label>
           <div id="opp-player-wrap">
@@ -1021,8 +1029,19 @@ App.views = (function () {
         </div>`;
 
       App.ui.openModal(presetOutcome ? `Gegner: ${OC_LABEL[presetOutcome]} eintragen` : 'Gegner-Wurf eintragen', html);
+      document.getElementById('modal-box').classList.add('modal-wide');
 
       setTimeout(() => {
+        // Halbkreis-Spielfeld als Positions-Picker — nur die Hälfte vor unserem Tor zeigen
+        const courtSvg = App.court.build();
+        courtSvg.setAttribute('viewBox', '0 0 450 400');
+        document.getElementById('lm-court-wrap').appendChild(courtSvg);
+        App.court.renderZones(courtSvg, 'opp', (zoneId, pos) => {
+          selectedOppPosition = zoneId;
+          selectedOppPos = pos;
+          courtSvg.querySelectorAll('.zone-chip').forEach(c => c.classList.toggle('selected', c.dataset.zone === zoneId));
+        });
+
         function buildRosterChips() {
           const roster = App.data.getOpponentRoster(gameId);
           const chips = document.getElementById('opp-roster-chips');
@@ -1079,7 +1098,8 @@ App.views = (function () {
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
-          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, rx: 0.25, ry: 0.5, goalZone: selectedZone });
+          const pos = selectedOppPos || { rx: 0.25, ry: 0.5 };
+          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedOppPosition, goalZone: selectedZone });
           if (selectedOutcome === 'goal') {
             App.data.setLiveGoalsAgainst(gameId, App.data.getLiveGoalsAgainst(gameId) + 1);
           }
