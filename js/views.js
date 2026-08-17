@@ -258,6 +258,7 @@ App.views = (function () {
     function renderShotChart(side) {
       const isOwn = side === 'own';
       body.innerHTML = `
+        <div class="card video-card" id="analysis-video-host" style="margin-bottom:16px"></div>
         <div class="court-wrap">
           <div class="court-controls">
             <button class="btn btn-primary" id="btn-add-shot">
@@ -296,6 +297,21 @@ App.views = (function () {
 
       const courtSvg = App.court.build();
       document.getElementById('court-container').appendChild(courtSvg);
+
+      App.video.renderPanel(document.getElementById('analysis-video-host'));
+
+      // Klick auf einen Wurf-Marker springt zur zugehörigen Szene im Video.
+      // Zonen-Chips haben einen eigenen Handler und werden hier nicht berührt.
+      courtSvg.addEventListener('click', e => {
+        const marker = e.target.closest('.shot-marker, .opp-shot-marker');
+        if (!marker) return;
+        const id = parseInt(marker.dataset.id);
+        const shot = (isOwn ? App.data.getShots(activeGameId) : App.data.getOpponentShots(activeGameId))
+          .find(s => s.id === id);
+        if (!shot) return;
+        if (shot.videoTime == null) { App.ui.toast('Zu diesem Wurf ist kein Videozeitpunkt gespeichert', 'inf'); return; }
+        if (!App.video.seekTo(shot.videoTime, { play: true })) App.ui.toast('Erst eine Aufnahme laden', 'inf');
+      });
 
       let entryOn = false;
 
@@ -662,6 +678,8 @@ App.views = (function () {
           </select>
         </div>
 
+        <div class="card video-card" id="live-video-host"></div>
+
         <div class="live-header">
           <div class="live-score-wrap">
             <div class="live-score-side">
@@ -720,9 +738,15 @@ App.views = (function () {
 
     const ts = App.live;
 
+    // Beim Auswerten einer Aufnahme ist die Videoposition die verlässlichere Quelle
+    // für die Spielminute als der Live-Timer, der dabei gar nicht mitläuft.
     function currentMinute() {
+      const ausVideo = App.video.currentMinute();
+      if (ausVideo != null) return ausVideo;
       return ts.timerSeconds > 0 ? Math.max(1, Math.ceil(ts.timerSeconds / 60)) : null;
     }
+
+    App.video.renderPanel(document.getElementById('live-video-host'), { compact: true });
 
     function refreshScore() {
       const ownGoals = App.data.getShots(currentGameId).filter(s => s.outcome === 'goal').length;
@@ -757,17 +781,26 @@ App.views = (function () {
             : (s.opponentPlayer ? `Gegner ${s.opponentPlayer}` : 'Gegner');
           const posLabel = s.position ? ` · ${App.court.ZONE_LABELS[s.position] || s.position}` : '';
           const minLabel = s.minute ? `, ${s.minute}'` : '';
+          const jump = s.videoTime != null
+            ? `<button class="ri-jump" data-jump-time="${s.videoTime}" title="Szene im Video zeigen (${App.video.fmt(s.videoTime)})">▶</button>`
+            : '';
           return `<div class="live-recent-item">
             <span class="ri-icon ${s.side === 'own' ? 'ri-own' : 'ri-opp'}">${s.side === 'own' ? '⚡' : '🛡'}</span>
             <span class="ri-text">${who} — <strong>${OC_LABEL[s.outcome] || s.outcome}</strong>${posLabel}${minLabel}</span>
+            ${jump}
             <button class="ri-del" data-del-id="${s.id}" data-del-side="${s.side}">×</button>
           </div>`;
         }).join('')}
       `;
     }
 
-    // Delete via event delegation on the stable wrapper
+    // Löschen und Videosprung über Delegation am stabilen Wrapper
     document.getElementById('live-recent-wrap').addEventListener('click', e => {
+      const jumpBtn = e.target.closest('[data-jump-time]');
+      if (jumpBtn) {
+        App.video.seekTo(parseFloat(jumpBtn.dataset.jumpTime), { play: true });
+        return;
+      }
       const btn = e.target.closest('[data-del-id]');
       if (!btn) return;
       const id = parseInt(btn.dataset.delId);
@@ -843,8 +876,11 @@ App.views = (function () {
     document.querySelector('.live-quick-wrap').addEventListener('click', e => {
       const btn = e.target.closest('.outcome-btn');
       if (!btn) return;
-      if (btn.dataset.side === 'own') openAttackModal(currentGameId, currentMinute(), btn.dataset.oc);
-      else openDefenseModal(currentGameId, currentMinute(), btn.dataset.oc);
+      // Videozeit im Moment des Tippens festhalten — das Video läuft weiter,
+      // während das Modal ausgefüllt wird.
+      const videoTime = App.video.getTime();
+      if (btn.dataset.side === 'own') openAttackModal(currentGameId, currentMinute(), btn.dataset.oc, videoTime);
+      else openDefenseModal(currentGameId, currentMinute(), btn.dataset.oc, videoTime);
     });
 
     // ── Game select ────────────────────────────────────────────────
@@ -861,7 +897,7 @@ App.views = (function () {
       { id:'bl', label:'UL' }, { id:'bm', label:'UM' }, { id:'br', label:'UR' },
     ];
 
-    function openAttackModal(gameId, autoMinute, presetOutcome) {
+    function openAttackModal(gameId, autoMinute, presetOutcome, videoTime) {
       const players = App.data.getPlayers();
       let selectedPlayerId = null;
       let selectedOutcome  = presetOutcome || null;
@@ -963,7 +999,7 @@ App.views = (function () {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const pos = selectedPos || { rx: 0.75, ry: 0.5 };
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
-          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone });
+          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone, videoTime });
           App.ui.closeModal();
           App.ui.toast('Wurf gespeichert', 'ok');
           refreshScore();
@@ -973,7 +1009,7 @@ App.views = (function () {
     }
 
     // ── Defense modal (with opponent roster) ──────────────────────
-    function openDefenseModal(gameId, autoMinute, presetOutcome) {
+    function openDefenseModal(gameId, autoMinute, presetOutcome, videoTime) {
       let selectedOutcome   = presetOutcome || null;
       let selectedZone      = null;
       let selectedOppPlayer = null;
@@ -1099,7 +1135,7 @@ App.views = (function () {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
           const pos = selectedOppPos || { rx: 0.25, ry: 0.5 };
-          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedOppPosition, goalZone: selectedZone });
+          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedOppPosition, goalZone: selectedZone, videoTime });
           if (selectedOutcome === 'goal') {
             App.data.setLiveGoalsAgainst(gameId, App.data.getLiveGoalsAgainst(gameId) + 1);
           }

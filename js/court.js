@@ -114,11 +114,17 @@ App.court = (function () {
     post:  '#4a90d9',
   };
 
+  // Würfe ohne brauchbare Koordinaten überspringen — sonst erzeugen sie SVG-Attribute
+  // wie cx="NaN" und die Konsole läuft voll. Betrifft Altdaten aus früheren Versionen.
+  function hatGueltigePosition(shot) {
+    return Number.isFinite(shot.rx) && Number.isFinite(shot.ry);
+  }
+
   function renderShots(svg, shots, players) {
     const layer = svg.querySelector('#shot-layer');
     while (layer.firstChild) layer.removeChild(layer.firstChild);
 
-    shots.forEach(shot => {
+    shots.filter(hatGueltigePosition).forEach(shot => {
       const { x, y } = relativeToSVG(shot.rx, shot.ry);
       const color = OUTCOME_COLOR[shot.outcome] || '#888';
       const player = players.find(p => p.id === shot.playerId);
@@ -150,7 +156,7 @@ App.court = (function () {
     if (!layer) return;
     while (layer.firstChild) layer.removeChild(layer.firstChild);
 
-    shots.forEach(shot => {
+    shots.filter(hatGueltigePosition).forEach(shot => {
       const { x, y } = relativeToSVG(shot.rx, shot.ry);
       const color = OUTCOME_COLOR[shot.outcome] || '#888';
 
@@ -356,7 +362,14 @@ App.court = (function () {
         if (!chip || !svg._zonePick) return;
         // Echte Tap-Position statt Zonen-Mitte — macht die Heatmap innerhalb einer
         // Zone aussagekräftig statt alle Würfe exakt übereinanderzulegen.
-        svg._zonePick(chip.dataset.zone, svgToRelative(svg, e.clientX, e.clientY));
+        // Fällt das Ergebnis unbrauchbar aus (z.B. SVG noch ohne Layout, Breite 0 →
+        // Division durch 0), lieber die Zonen-Mitte nehmen als NaN/Infinity zu
+        // speichern — solche Werte landen sonst dauerhaft in den Daten und machen
+        // später die Spielfeld-Darstellung kaputt.
+        const tap = svgToRelative(svg, e.clientX, e.clientY);
+        const brauchbar = Number.isFinite(tap.rx) && Number.isFinite(tap.ry);
+        svg._zonePick(chip.dataset.zone,
+          brauchbar ? tap : zoneCenterRel(chip.dataset.zone, svg._zoneSide));
       };
       svg.addEventListener('click', svg._zoneHandler);
     }
