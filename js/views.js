@@ -248,11 +248,63 @@ App.views = (function () {
             <button class="seg-btn" data-mode="momentum">Momentum</button>
           </div>
         </div>
+        <div class="live-video-panel" id="an-video-panel">
+          <div class="live-quick-label">Video</div>
+          <div class="live-video-row">
+            <button class="btn btn-outline btn-sm" id="an-btn-load-video" type="button">Video laden…</button>
+            <input type="file" id="an-video-file" accept="video/*" style="display:none">
+            <span class="live-video-filename" id="an-video-filename">Keine Aufnahme für dieses Spiel gespeichert</span>
+          </div>
+          <video class="live-video-player" id="an-video-player" controls playsinline style="display:none"></video>
+        </div>
         <div id="analysis-body"></div>
       </div>
     `;
 
     const body = document.getElementById('analysis-body');
+
+    // ── Video zum ausgewählten Spiel ────────────────────────────────
+    const anPlayer   = document.getElementById('an-video-player');
+    const anFilename = document.getElementById('an-video-filename');
+
+    function refreshAnalysisVideo() {
+      const da = App.video.isLoaded();
+      anPlayer.style.display = da ? '' : 'none';
+      if (!da) {
+        anFilename.textContent = 'Keine Aufnahme für dieses Spiel gespeichert';
+        return;
+      }
+      App.video.attach(anPlayer);
+      anFilename.textContent = App.video.fileName() + ' · auf einen Wurf im Feld tippen springt zur Szene';
+    }
+
+    // Beim Spielwechsel die passende Aufnahme zurückholen und die Würfe neu zeichnen
+    // (die Marker hängen davon ab, ob ein Video geladen ist).
+    function ladeVideoFuerSpiel() {
+      return App.video.restoreForGame(activeGameId).then(() => {
+        refreshAnalysisVideo();
+        return true;
+      });
+    }
+
+    document.getElementById('an-btn-load-video').addEventListener('click', () => {
+      document.getElementById('an-video-file').click();
+    });
+
+    document.getElementById('an-video-file').addEventListener('change', function () {
+      const f = this.files[0];
+      if (!f) return;
+      App.ui.toast('Video wird gespeichert…', 'inf');
+      App.video.requestPersist();
+      App.video.load(f, activeGameId).then(gespeichert => {
+        refreshAnalysisVideo();
+        App.ui.toast(gespeichert
+          ? 'Video gespeichert — bleibt auch nach dem Neuladen erhalten'
+          : 'Video geladen, konnte aber nicht gespeichert werden (Speicherplatz?)',
+          gespeichert ? 'ok' : 'err');
+      });
+      this.value = '';
+    });
 
     // ── Shot chart (own or opponent) ─────────────────────────────────
     function renderShotChart(side) {
@@ -296,6 +348,25 @@ App.views = (function () {
 
       const courtSvg = App.court.build();
       document.getElementById('court-container').appendChild(courtSvg);
+
+      // Klick auf einen Wurf-Marker springt zur Szene im Video.
+      // Der Eintrags-Modus ignoriert Marker-Klicks, deshalb kommen sich die
+      // beiden Handler nicht in die Quere.
+      courtSvg.addEventListener('click', e => {
+        const marker = e.target.closest('.shot-marker, .opp-shot-marker');
+        if (!marker || !App.video.isLoaded()) return;
+        const id = parseInt(marker.dataset.id);
+        const liste = marker.classList.contains('opp-shot-marker')
+          ? App.data.getOpponentShots(activeGameId)
+          : App.data.getShots(activeGameId);
+        const shot = liste.find(s => s.id === id);
+        if (!shot || shot.videoTime == null) {
+          App.ui.toast('Zu diesem Wurf wurde keine Videoposition erfasst', 'inf');
+          return;
+        }
+        App.video.seekTo(shot.videoTime, { play: true });
+        anPlayer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
 
       let entryOn = false;
 
@@ -491,10 +562,12 @@ App.views = (function () {
     }
 
     render();
+    ladeVideoFuerSpiel();
 
     document.getElementById('analysis-game-select').addEventListener('change', function () {
       activeGameId = parseInt(this.value);
       render();
+      ladeVideoFuerSpiel();
     });
 
     document.getElementById('analysis-mode').addEventListener('click', function (e) {
@@ -635,6 +708,15 @@ App.views = (function () {
           <input type="file" id="f-import-file" accept=".json,application/json" style="display:none">
         </div>
       </div>
+      <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px;">
+        <div class="card-title" style="margin-bottom:6px">Gespeicherte Aufnahmen</div>
+        <p class="text-muted" style="font-size:12px;margin:0 0 12px">
+          Videos liegen im Browserspeicher dieses Geräts und sind <strong>nicht</strong> Teil der
+          JSON-Sicherung — die enthält nur die Spieldaten.
+        </p>
+        <div id="video-storage-list">Wird geladen…</div>
+        <div class="text-muted" style="font-size:12px;margin-top:10px" id="video-storage-quota"></div>
+      </div>
     `;
   }
 
@@ -694,9 +776,12 @@ App.views = (function () {
           <div class="live-video-row">
             <button class="btn btn-outline btn-sm" id="btn-load-video" type="button">Video laden…</button>
             <input type="file" id="live-video-file" accept="video/*" style="display:none">
+            <button class="btn btn-outline btn-sm" id="btn-kickoff" type="button" style="display:none"
+                    title="Setzt den Anpfiff auf die aktuelle Stelle im Video">Anpfiff = hier</button>
+            <button class="btn btn-ghost btn-sm" id="btn-video-remove" type="button" style="display:none">Entfernen</button>
             <span class="live-video-filename" id="live-video-filename"></span>
           </div>
-          <video class="live-video-player" id="live-video-player" controls style="display:none"></video>
+          <video class="live-video-player" id="live-video-player" controls playsinline style="display:none"></video>
         </div>
 
         <div class="live-quick-wrap grid-2">
@@ -730,7 +815,11 @@ App.views = (function () {
 
     const ts = App.live;
 
+    // Beim Auswerten einer Aufnahme ist die Videoposition die verlässlichere Quelle
+    // für die Spielminute — der Live-Timer läuft dabei gar nicht mit.
     function currentMinute() {
+      const ausVideo = App.video.currentMinute();
+      if (ausVideo != null) return ausVideo;
       return ts.timerSeconds > 0 ? Math.max(1, Math.ceil(ts.timerSeconds / 60)) : null;
     }
 
@@ -767,17 +856,33 @@ App.views = (function () {
             : (s.opponentPlayer ? `Gegner ${s.opponentPlayer}` : 'Gegner');
           const posLabel = s.position ? ` · ${App.court.ZONE_LABELS[s.position] || s.position}` : '';
           const minLabel = s.minute ? `, ${s.minute}'` : '';
+          // Sprung zur Szene — nur sinnvoll, wenn eine Aufnahme geladen ist und
+          // der Eintrag beim Erfassen eine Videoposition mitbekommen hat.
+          const jump = (App.video.isLoaded() && s.videoTime != null)
+            ? `<button class="ri-jump" data-jump-time="${s.videoTime}"
+                       title="Zur Szene springen (${App.video.fmt(s.videoTime)})">▶</button>`
+            : '';
           return `<div class="live-recent-item">
             <span class="ri-icon ${s.side === 'own' ? 'ri-own' : 'ri-opp'}">${s.side === 'own' ? '⚡' : '🛡'}</span>
             <span class="ri-text">${who} — <strong>${OC_LABEL[s.outcome] || s.outcome}</strong>${posLabel}${minLabel}</span>
+            ${jump}
             <button class="ri-del" data-del-id="${s.id}" data-del-side="${s.side}">×</button>
           </div>`;
         }).join('')}
       `;
     }
 
-    // Delete via event delegation on the stable wrapper
+    // Delete und Video-Sprung via event delegation on the stable wrapper
     document.getElementById('live-recent-wrap').addEventListener('click', e => {
+      const jumpBtn = e.target.closest('[data-jump-time]');
+      if (jumpBtn) {
+        const sek = parseFloat(jumpBtn.dataset.jumpTime);
+        if (App.video.seekTo(sek, { play: true })) {
+          document.getElementById('live-video-player')
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return;
+      }
       const btn = e.target.closest('[data-del-id]');
       if (!btn) return;
       const id = parseInt(btn.dataset.delId);
@@ -787,18 +892,32 @@ App.views = (function () {
       refreshRecent();
     });
 
-    // ── Video (Stufe 1b) ──────────────────────────────────────────
+    // ── Video (Stufe 1b + dauerhafte Speicherung) ─────────────────
     const videoPlayer = document.getElementById('live-video-player');
     const videoFilenameEl = document.getElementById('live-video-filename');
+    const kickoffBtn = document.getElementById('btn-kickoff');
+    const removeBtn  = document.getElementById('btn-video-remove');
 
     function refreshVideoUI() {
-      if (App.video.isLoaded()) {
-        App.video.attach(videoPlayer);
-        videoPlayer.style.display = '';
-        videoFilenameEl.textContent = App.video.fileName();
-      }
+      const da = App.video.isLoaded();
+      videoPlayer.style.display = da ? '' : 'none';
+      kickoffBtn.style.display  = da ? '' : 'none';
+      removeBtn.style.display   = da ? '' : 'none';
+      if (!da) { videoFilenameEl.textContent = ''; return; }
+      App.video.attach(videoPlayer);
+      const ko = App.video.getKickoff();
+      videoFilenameEl.textContent = App.video.fileName()
+        + (ko > 0 ? ` · Anpfiff bei ${App.video.fmt(ko)}` : ' · Anpfiff noch nicht gesetzt');
     }
-    refreshVideoUI();
+
+    // Gespeicherte Aufnahme des aktuellen Spiels zurückholen
+    function ladeGespeichertesVideo() {
+      App.video.restoreForGame(currentGameId).then(gefunden => {
+        refreshVideoUI();
+        if (gefunden) refreshRecent();   // Sprung-Knöpfe hängen an isLoaded()
+      });
+    }
+    ladeGespeichertesVideo();
 
     document.getElementById('btn-load-video').addEventListener('click', () => {
       document.getElementById('live-video-file').click();
@@ -807,9 +926,32 @@ App.views = (function () {
     document.getElementById('live-video-file').addEventListener('change', function () {
       const f = this.files[0];
       if (!f) return;
-      App.video.load(f);
+      App.ui.toast('Video wird gespeichert…', 'inf');
+      App.video.requestPersist();
+      App.video.load(f, currentGameId).then(gespeichert => {
+        refreshVideoUI();
+        refreshRecent();
+        App.ui.toast(gespeichert
+          ? 'Video gespeichert — bleibt auch nach dem Neuladen erhalten'
+          : 'Video geladen, konnte aber nicht gespeichert werden (Speicherplatz?)',
+          gespeichert ? 'ok' : 'err');
+      });
+      this.value = '';
+    });
+
+    kickoffBtn.addEventListener('click', () => {
+      App.video.markKickoffHere();
       refreshVideoUI();
-      App.ui.toast('Video geladen', 'ok');
+      App.ui.toast(`Anpfiff auf ${App.video.fmt(App.video.getKickoff())} gesetzt`, 'ok');
+    });
+
+    removeBtn.addEventListener('click', () => {
+      if (!confirm('Gespeicherte Aufnahme für dieses Spiel löschen?')) return;
+      App.video.remove(currentGameId).then(() => {
+        refreshVideoUI();
+        refreshRecent();
+        App.ui.toast('Aufnahme gelöscht', 'ok');
+      });
     });
 
     // ── Timer ──────────────────────────────────────────────────────
@@ -887,6 +1029,7 @@ App.views = (function () {
       currentGameId = parseInt(this.value);
       refreshScore();
       refreshRecent();
+      ladeGespeichertesVideo();   // jedes Spiel hat seine eigene Aufnahme
     });
 
     // ── Attack modal ───────────────────────────────────────────────
