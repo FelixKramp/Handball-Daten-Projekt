@@ -65,7 +65,7 @@ body {
   font-size: 14px;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
-.sidebar, .card, .modal-box, .live-header, .live-quick-panel, .live-court-wrap,
+.sidebar, .card, .modal-box, .live-header, .live-quick-panel, .live-video-panel, .live-court-wrap,
 .live-recent-item, td, th {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
@@ -943,6 +943,30 @@ select.form-control { cursor: pointer; }
 }
 .live-quick-panel .outcome-btn-group { gap: 8px; }
 .live-quick-panel .outcome-btn { padding: 14px 8px; font-size: 14px; }
+
+.live-video-panel {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.live-video-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.live-video-filename {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.live-video-player {
+  width: 100%;
+  max-height: 240px;
+  border-radius: var(--radius-sm);
+  margin-top: 10px;
+}
 
 .live-recent-wrap { padding: 8px 16px 16px; }
 .live-recent-header {

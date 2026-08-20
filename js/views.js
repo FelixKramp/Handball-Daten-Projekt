@@ -692,6 +692,16 @@ App.views = (function () {
           </div>
         </div>
 
+        <div class="live-video-panel matchform-panel">
+          <div class="live-quick-label matchform-panel-label">Video</div>
+          <div class="live-video-row">
+            <button class="btn btn-outline btn-sm" id="btn-load-video" type="button">Video laden…</button>
+            <input type="file" id="live-video-file" accept="video/*" style="display:none">
+            <span class="live-video-filename" id="live-video-filename"></span>
+          </div>
+          <video class="live-video-player" id="live-video-player" controls style="display:none"></video>
+        </div>
+
         <div class="live-quick-wrap grid-2 matchform-outcomes">
           <div class="live-quick-panel matchform-panel">
             <div class="live-quick-label matchform-panel-label">Unsere Würfe</div>
@@ -795,6 +805,31 @@ App.views = (function () {
       else App.data.deleteOpponentShot(id);
       refreshScore();
       refreshRecent();
+    });
+
+    // ── Video (Stufe 1b) ──────────────────────────────────────────
+    const videoPlayer = document.getElementById('live-video-player');
+    const videoFilenameEl = document.getElementById('live-video-filename');
+
+    function refreshVideoUI() {
+      if (App.video.isLoaded()) {
+        App.video.attach(videoPlayer);
+        videoPlayer.style.display = '';
+        videoFilenameEl.textContent = App.video.fileName();
+      }
+    }
+    refreshVideoUI();
+
+    document.getElementById('btn-load-video').addEventListener('click', () => {
+      document.getElementById('live-video-file').click();
+    });
+
+    document.getElementById('live-video-file').addEventListener('change', function () {
+      const f = this.files[0];
+      if (!f) return;
+      App.video.load(f);
+      refreshVideoUI();
+      App.ui.toast('Video geladen', 'ok');
     });
 
     // ── Timer ──────────────────────────────────────────────────────
@@ -983,7 +1018,9 @@ App.views = (function () {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const pos = selectedPos || { rx: 0.75, ry: 0.5 };
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
-          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone });
+          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone,
+            clockSec: ts.timerSeconds, wallClock: Date.now(),
+            ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}) });
           App.ui.closeModal();
           App.ui.toast('Wurf gespeichert', 'ok');
           refreshScore();
@@ -1119,7 +1156,9 @@ App.views = (function () {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
           const pos = selectedOppPos || { rx: 0.25, ry: 0.5 };
-          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedOppPosition, goalZone: selectedZone });
+          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedOppPosition, goalZone: selectedZone,
+            clockSec: ts.timerSeconds, wallClock: Date.now(),
+            ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}) });
           if (selectedOutcome === 'goal') {
             App.data.setLiveGoalsAgainst(gameId, App.data.getLiveGoalsAgainst(gameId) + 1);
           }
