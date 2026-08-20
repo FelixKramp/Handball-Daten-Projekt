@@ -489,6 +489,9 @@ select.form-control { cursor: pointer; }
   pointer-events: none;
 }
 .toast {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   background: var(--surface-2);
   border: 1px solid var(--border-2);
   border-radius: var(--radius-sm);
@@ -499,9 +502,11 @@ select.form-control { cursor: pointer; }
   animation: toastIn 0.2s ease;
   max-width: 280px;
 }
-.toast-ok  { border-left: 3px solid var(--green); }
-.toast-err { border-left: 3px solid var(--accent); }
-.toast-inf { border-left: 3px solid var(--blue); }
+.toast-icon { flex-shrink: 0; width: 16px; height: 16px; }
+.toast-icon svg { width: 100%; height: 100%; }
+.toast-ok  .toast-icon { color: var(--green); }
+.toast-err .toast-icon { color: var(--accent); }
+.toast-inf .toast-icon { color: var(--blue); }
 @keyframes toastIn {
   from { transform: translateX(30px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
@@ -1121,3 +1126,289 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 3px; }
+
+/* ============================================================
+   Spielmodus — Digitaler Spielbericht
+   Eigene visuelle Welt nur für den Live-Erfassungsbildschirm
+   (.matchform) und sein Erfassungs-Modal (.modal-matchform).
+   Alle anderen Ansichten bleiben unverändert.
+   ============================================================ */
+.matchform,
+.modal-matchform {
+  --form-sheet:       #16181c;
+  --form-sheet-alt:   #1e2126;
+  --form-rule:        #3a3f47;
+  --form-rule-strong: #565d67;
+  --form-ink:         #eef0f2;
+  --form-ink-dim:     #9aa1ab;
+  --form-ink-faint:   rgba(238,240,242,0.05);
+  --form-shadow:      0 10px 24px rgba(0,0,0,0.35);
+}
+[data-theme="light"] .matchform,
+[data-theme="light"] .modal-matchform {
+  --form-sheet:       #ffffff;
+  --form-sheet-alt:   #f4f5f7;
+  --form-rule:        #d7dade;
+  --form-rule-strong: #9aa1ab;
+  --form-ink:         #1c1f23;
+  --form-ink-dim:     #6b7280;
+  --form-ink-faint:   rgba(28,31,35,0.035);
+  --form-shadow:      0 10px 20px rgba(30,40,45,0.10);
+}
+
+/* ── Blatt ──────────────────────────────────────────────────────── */
+.matchform-sheet {
+  background: var(--form-sheet);
+  border: 1px solid var(--form-rule-strong);
+  border-radius: 8px;
+  box-shadow: var(--form-shadow);
+  color: var(--form-ink);
+}
+.matchform-body { padding: 20px 20px 16px; }
+
+.matchform-gamebar {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 4px double var(--form-rule-strong);
+}
+.matchform-field-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--form-ink-dim);
+  margin-bottom: 5px;
+}
+.matchform-gamebar .live-game-select {
+  background: var(--form-sheet-alt);
+  border: 1px solid var(--form-rule);
+  border-radius: 4px;
+  color: var(--form-ink);
+}
+
+/* ── Ergebnis / Spielzeit als lineierte Formularfelder ───────────── */
+.matchform-scoreboard {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 4px 4px 18px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--form-rule);
+  flex-wrap: wrap;
+}
+.matchform .live-score-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--form-ink-dim);
+}
+.matchform .live-score-num { font-size: 58px; text-shadow: none; }
+.matchform .live-score-sep { color: var(--form-ink-dim); }
+.matchform .live-adj-btn {
+  background: var(--form-sheet-alt);
+  border-color: var(--form-rule);
+  color: var(--form-ink);
+}
+.matchform .live-adj-btn:hover { background: var(--form-rule); }
+
+.matchform-timer {
+  background: var(--form-sheet-alt);
+  border: 1px solid var(--form-rule);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.matchform .live-hz-badge { background: var(--form-sheet); border: 1px solid var(--form-rule); color: var(--form-ink-dim); }
+.matchform .live-timer-display { color: var(--form-ink); font-variant-numeric: tabular-nums; }
+.matchform .live-ctrl-half {
+  background: var(--form-sheet);
+  border-color: var(--form-rule);
+  color: var(--form-ink-dim);
+}
+.matchform .live-ctrl-half:hover { background: var(--form-rule); color: var(--form-ink); }
+
+/* ── Ankreuz-Felder (Ergebnis-Erfassung) ─────────────────────────── */
+.matchform-panel { background: none; border: none; padding: 0; }
+.matchform-panel-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--form-ink-dim);
+  margin-bottom: 10px;
+}
+.matchform-check-group { gap: 8px; }
+.matchform-check-group .outcome-btn,
+.modal-matchform .outcome-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 4px;
+}
+.matchform-check-group .outcome-btn::before,
+.modal-matchform .outcome-btn::before {
+  content: '';
+  width: 13px; height: 13px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  flex-shrink: 0;
+  transition: background-color 0.12s;
+}
+.matchform-check-group .outcome-btn { border: 1.5px solid var(--form-rule); }
+.matchform-check-group .outcome-btn:hover { border-color: currentColor; }
+
+/* ── Ereignisprotokoll ────────────────────────────────────────────── */
+.matchform-log {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 2px solid var(--form-rule-strong);
+}
+.matchform .live-recent-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--form-ink-dim);
+  margin-bottom: 6px;
+}
+.matchform .live-recent-empty { color: var(--form-ink-dim); }
+.matchform .live-recent-item {
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--form-rule);
+  border-radius: 0;
+  padding: 8px 4px;
+  margin-bottom: 0;
+}
+.matchform .live-recent-item:nth-child(even) { background: var(--form-sheet-alt); }
+.matchform .live-recent-item:last-child { border-bottom: none; }
+.matchform .ri-num {
+  flex-shrink: 0;
+  min-width: 18px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--form-ink-dim);
+  text-align: right;
+}
+.matchform .ri-text { color: var(--form-ink); }
+.matchform .ri-own  { color: var(--green); }
+.matchform .ri-opp  { color: var(--accent); }
+.matchform .ri-icon svg { width: 15px; height: 15px; display: block; }
+.matchform .ri-del { color: var(--form-ink-dim); }
+.matchform .ri-del:hover { background: var(--accent-dim); color: var(--accent); }
+
+/* ── Erfassungs-Modal ─────────────────────────────────────────────── */
+.modal-matchform { background: var(--form-sheet); border-color: var(--form-rule-strong); }
+.modal-matchform .modal-title,
+.modal-matchform .modal-close-btn { color: var(--form-ink); }
+.modal-matchform .modal-close-btn:hover { color: var(--form-ink-dim); }
+.modal-matchform .form-group label { color: var(--form-ink-dim); }
+.modal-matchform .form-control {
+  background: var(--form-sheet-alt);
+  border-color: var(--form-rule);
+  border-radius: 4px;
+  color: var(--form-ink);
+}
+.modal-matchform .form-actions { border-top-color: var(--form-rule); }
+.modal-matchform .live-court-wrap { background: none; border: none; padding: 0; }
+
+/* Spielfeld-SVG wird per CSS in Formular-Lineatur umgefärbt — die
+   Zeichenlogik (court.js) bleibt für die Spielanalyse unverändert;
+   SVG-Präsentationsattribute haben Spezifität 0 und werden von jeder
+   CSS-Regel überschrieben. */
+.modal-matchform .court-svg rect { fill: none !important; stroke: var(--form-rule-strong) !important; }
+.modal-matchform .court-svg path { fill: none !important; stroke: var(--form-ink-dim) !important; }
+.modal-matchform .court-svg line { stroke: var(--form-ink-dim) !important; }
+.modal-matchform .court-svg circle:not(.zone-chip-bg) { fill: var(--form-ink-dim) !important; stroke: none !important; }
+
+.modal-matchform .zone-chip-bg { fill: var(--form-ink-faint); stroke: var(--form-ink-dim); stroke-width: 1.2; }
+.modal-matchform .zone-chip:hover .zone-chip-bg,
+.modal-matchform .zone-chip:active .zone-chip-bg { fill: var(--green-dim); stroke: var(--green); }
+.modal-matchform .zone-chip-label { fill: var(--form-ink); text-shadow: none; }
+.modal-matchform .zone-chip.selected .zone-chip-bg {
+  fill: var(--green-dim) !important;
+  stroke: var(--green) !important;
+  stroke-width: 2.5 !important;
+  filter: none !important;
+  animation: formStamp .15s cubic-bezier(0.16,1,0.3,1);
+}
+
+.modal-matchform .live-player-btn {
+  background: var(--form-sheet-alt);
+  border-color: var(--form-rule);
+  border-radius: 4px;
+  color: var(--form-ink);
+}
+.modal-matchform .live-player-btn:hover { background: var(--form-rule); }
+.modal-matchform .live-player-btn.selected {
+  border-color: var(--green);
+  background: var(--green-dim);
+  color: var(--green);
+  animation: formStamp .15s cubic-bezier(0.16,1,0.3,1);
+}
+.modal-matchform .live-player-btn .pname { color: inherit; opacity: 0.75; }
+
+.modal-matchform .gz-btn {
+  background: var(--form-sheet-alt);
+  border-color: var(--form-rule);
+  color: var(--form-ink-dim);
+}
+.modal-matchform .gz-btn:hover { background: var(--form-rule); color: var(--form-ink); }
+.modal-matchform .gz-btn.selected {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+  animation: formStamp .15s cubic-bezier(0.16,1,0.3,1);
+}
+
+.modal-matchform .opp-roster-btn {
+  background: var(--form-sheet-alt);
+  border-color: var(--form-rule);
+  color: var(--form-ink-dim);
+}
+.modal-matchform .opp-roster-btn:hover { background: var(--form-rule); color: var(--form-ink); }
+.modal-matchform .opp-roster-btn.selected { animation: formStamp .15s cubic-bezier(0.16,1,0.3,1); }
+.modal-matchform .opp-roster-add { border-color: var(--form-rule); color: var(--form-ink-dim); }
+.modal-matchform .opp-roster-add:hover { color: var(--form-ink); border-color: var(--form-ink-dim); }
+
+.modal-matchform .outcome-btn { border: 1.5px solid var(--form-rule); }
+.modal-matchform .outcome-btn.selected { border-color: currentColor; }
+.modal-matchform .outcome-btn.selected::before {
+  background: currentColor;
+  animation: formStamp .15s cubic-bezier(0.16,1,0.3,1);
+}
+
+/* ── Browser surfaces: Fokus & Selektion in Formular-Tinte ───────── */
+.matchform *:focus-visible,
+.modal-matchform *:focus-visible {
+  outline: 2.5px solid var(--form-ink);
+  outline-offset: 2px;
+}
+.matchform ::selection,
+.modal-matchform ::selection { background: var(--green-dim); color: var(--green); }
+
+/* ── Signatur-Interaktion: Formular-Stempel ──────────────────────── */
+@keyframes formStamp {
+  from { transform: scale(0.9); opacity: 0.7; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.form-stamp { animation: formStamp .18s cubic-bezier(0.16,1,0.3,1); }
+@media (prefers-reduced-motion: reduce) {
+  .form-stamp,
+  .modal-matchform .zone-chip.selected .zone-chip-bg,
+  .modal-matchform .live-player-btn.selected,
+  .modal-matchform .gz-btn.selected,
+  .modal-matchform .opp-roster-btn.selected,
+  .modal-matchform .outcome-btn.selected::before { animation: none; }
+}
+
+@media (max-width: 700px) {
+  .matchform-body { padding: 14px 14px 10px; }
+  .matchform .live-score-num { font-size: 44px; }
+}
+@media (pointer: coarse) {
+  .matchform-check-group .outcome-btn { padding: 18px 8px; }
+  .modal-matchform .live-player-btn { min-height: 52px; }
+}
