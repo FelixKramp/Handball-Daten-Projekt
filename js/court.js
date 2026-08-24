@@ -123,7 +123,12 @@ App.court = (function () {
       const color = OUTCOME_COLOR[shot.outcome] || '#888';
       const player = players.find(p => p.id === shot.playerId);
 
-      const g = ns('g', { class: 'shot-marker', 'data-id': shot.id });
+      // has-video markiert Würfe, zu denen eine Videoposition erfasst wurde —
+      // die sind in der Spielanalyse anklickbar.
+      const g = ns('g', {
+        class: 'shot-marker' + (shot.videoTime != null ? ' has-video' : ''),
+        'data-id': shot.id
+      });
 
       // Outer ring
       g.appendChild(ns('circle', { cx: x, cy: y, r: 9, fill: color, opacity: 0.25 }));
@@ -154,7 +159,10 @@ App.court = (function () {
       const { x, y } = relativeToSVG(shot.rx, shot.ry);
       const color = OUTCOME_COLOR[shot.outcome] || '#888';
 
-      const g = ns('g', { class: 'opp-shot-marker', 'data-id': shot.id });
+      const g = ns('g', {
+        class: 'opp-shot-marker' + (shot.videoTime != null ? ' has-video' : ''),
+        'data-id': shot.id
+      });
       // Dashed outer ring — visually distinct from own shots (solid)
       g.appendChild(ns('circle', { cx: x, cy: y, r: 10, fill: 'none', stroke: color, 'stroke-width': 1.5, opacity: 0.55, 'stroke-dasharray': '3,3' }));
       // Diamond inner (rotated square)

@@ -389,6 +389,8 @@ App.ui = (function () {
             };
             reader.readAsText(file);
           });
+
+          renderVideoStorage();
         }, 0);
         break;
       }
@@ -398,6 +400,49 @@ App.ui = (function () {
         break;
     }
   });
+
+  // ── Speicherübersicht der Videos (in den Einstellungen) ────────────
+  function renderVideoStorage() {
+    const host = document.getElementById('video-storage-list');
+    if (!host) return;
+
+    App.video.list().then(recs => {
+      if (!document.getElementById('video-storage-list')) return;   // Modal schon zu
+      if (recs.length === 0) {
+        host.innerHTML = '<div class="text-muted" style="font-size:13px">Noch keine Aufnahme gespeichert.</div>';
+        return;
+      }
+      const games = App.data.getGames();
+      host.innerHTML = recs
+        .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))
+        .map(r => {
+          const g = games.find(x => x.id === r.gameId);
+          const titel = g ? `${App.views.dateFmt(g.date)} – ${g.opponent}` : `Spiel ${r.gameId}`;
+          return `<div class="video-store-row">
+            <span class="vs-title">${titel}</span>
+            <span class="vs-size">${App.video.mb(r.size)}</span>
+            <button class="btn btn-ghost btn-sm" data-vs-del="${r.gameId}" type="button">Löschen</button>
+          </div>`;
+        }).join('');
+    });
+
+    App.video.quota().then(q => {
+      const el = document.getElementById('video-storage-quota');
+      if (!el || !q) return;
+      el.textContent = `Browserspeicher belegt: ${App.video.mb(q.belegt)} von ${App.video.mb(q.gesamt)}`;
+    });
+
+    host.onclick = e => {
+      const btn = e.target.closest('[data-vs-del]');
+      if (!btn) return;
+      const gameId = parseInt(btn.dataset.vsDel);
+      if (!confirm('Diese Aufnahme löschen?')) return;
+      App.video.remove(gameId).then(() => {
+        renderVideoStorage();
+        toast('Aufnahme gelöscht', 'ok');
+      });
+    };
+  }
 
   // ── Theme (Hell/Dunkel) ────────────────────────────────────────────
   const THEME_KEY = 'hb_theme';
@@ -411,6 +456,10 @@ App.ui = (function () {
     if (iconDark)  iconDark.style.display  = isLight ? 'none' : '';
     if (iconLight) iconLight.style.display = isLight ? '' : 'none';
     if (label)     label.textContent = isLight ? 'Dunkler Modus' : 'Heller Modus';
+    // Als installierte App färbt das die Statusleiste — sonst bleibt sie im hellen
+    // Modus dunkel stehen.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', isLight ? '#f4f6f9' : '#0d1117');
   }
 
   function toggleTheme() {
