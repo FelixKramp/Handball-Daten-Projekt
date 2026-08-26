@@ -8,7 +8,7 @@
  * sonst bekommen installierte Geräte die alte Fassung weiter ausgeliefert.
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `hb-app-${CACHE_VERSION}`;
 
 // Relative Pfade, damit es unter GitHub Pages im Unterordner genauso läuft wie lokal.
@@ -24,6 +24,7 @@ const APP_SHELL = [
   './js/data.js',
   './js/court.js',
   './js/api.js',
+  './js/csv.js',
   './js/video.js',
   './js/views.js',
   './js/app.js',
