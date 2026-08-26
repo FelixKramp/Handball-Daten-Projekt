@@ -36,6 +36,56 @@ App.ui = (function () {
   closeBtn.addEventListener('click', closeModal);
   backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
 
+  // ── Rückfrage vor löschenden Aktionen ─────────────────────────────
+  //
+  // Ersetzt das native confirm(). Grund: Browser bieten nach mehreren
+  // Dialogen "Weitere Dialoge dieser Seite verhindern" an, und in der
+  // installierten App werden sie ebenfalls unterdrückt. Danach liefert
+  // confirm() wortlos false — jede Löschen-Aktion tat dann scheinbar
+  // nichts, ohne Dialog und ohne Fehlermeldung.
+  const confirmBackdrop = document.getElementById('confirm-backdrop');
+  const confirmTextEl   = document.getElementById('confirm-text');
+  const confirmOkBtn    = document.getElementById('confirm-ok');
+  const confirmCancel   = document.getElementById('confirm-cancel');
+  let confirmResolve    = null;
+
+  function settleConfirm(answer) {
+    if (!confirmResolve) return;
+    confirmBackdrop.classList.remove('open');
+    document.removeEventListener('keydown', confirmKeydown);
+    const resolve = confirmResolve;
+    confirmResolve = null;
+    resolve(answer);
+  }
+
+  function confirmKeydown(e) {
+    if (e.key === 'Escape') settleConfirm(false);
+    if (e.key === 'Enter')  settleConfirm(true);
+  }
+
+  /**
+   * @param {string} text  Was passiert, wenn bestätigt wird.
+   * @param {string} [okLabel]  Beschriftung des bestätigenden Knopfes.
+   * @returns {Promise<boolean>}
+   */
+  function askConfirm(text, okLabel) {
+    // Eine bereits offene Rückfrage gilt als abgelehnt, damit nie zwei
+    // Zusagen auf dieselbe Aktion warten.
+    settleConfirm(false);
+    confirmTextEl.textContent = text;
+    confirmOkBtn.textContent  = okLabel || 'Löschen';
+    confirmBackdrop.classList.add('open');
+    confirmOkBtn.focus();
+    document.addEventListener('keydown', confirmKeydown);
+    return new Promise(resolve => { confirmResolve = resolve; });
+  }
+
+  confirmOkBtn.addEventListener('click', () => settleConfirm(true));
+  confirmCancel.addEventListener('click', () => settleConfirm(false));
+  confirmBackdrop.addEventListener('click', e => {
+    if (e.target === confirmBackdrop) settleConfirm(false);
+  });
+
   // ── Toast ─────────────────────────────────────────────────────────
   const toastArea = document.getElementById('toast-area');
 
@@ -326,13 +376,19 @@ App.ui = (function () {
         break;
       }
 
-      case 'delete-player':
-        if (!confirm('Spieler wirklich löschen?')) break;
-        App.data.deletePlayer(id);
-        closeModal();
-        toast('Spieler gelöscht', 'ok');
-        navigate('squad');
+      case 'delete-player': {
+        const player = App.data.getPlayer(id);
+        askConfirm(
+          player ? `${player.name} aus dem Kader löschen?` : 'Spieler wirklich löschen?'
+        ).then(ja => {
+          if (!ja) return;
+          App.data.deletePlayer(id);
+          closeModal();
+          toast('Spieler gelöscht', 'ok');
+          navigate('squad');
+        });
         break;
+      }
 
       case 'add-game': {
         const formHtml = App.views.gameFormHTML() + `
@@ -377,10 +433,12 @@ App.ui = (function () {
       }
 
       case 'delete-game':
-        if (!confirm('Spiel und alle zugehörigen Würfe löschen?')) break;
-        App.data.deleteGame(id);
-        toast('Spiel gelöscht', 'ok');
-        navigate('schedule');
+        askConfirm('Spiel und alle zugehörigen Würfe löschen?').then(ja => {
+          if (!ja) return;
+          App.data.deleteGame(id);
+          toast('Spiel gelöscht', 'ok');
+          navigate('schedule');
+        });
         break;
 
       case 'import-api':
@@ -448,22 +506,24 @@ App.ui = (function () {
           fileInput?.addEventListener('change', () => {
             const file = fileInput.files[0];
             if (!file) return;
-            if (!confirm('Aktuelle Daten werden durch die Sicherung ersetzt. Fortfahren?')) {
-              fileInput.value = '';
-              return;
-            }
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (App.data.importJSON(reader.result)) {
-                closeModal();
-                init();
-                toast('Sicherung wiederhergestellt', 'ok');
-              } else {
-                toast('Ungültige Sicherungsdatei', 'err');
-              }
-              fileInput.value = '';
-            };
-            reader.readAsText(file);
+            askConfirm(
+              'Aktuelle Daten werden durch die Sicherung ersetzt. Fortfahren?',
+              'Ersetzen'
+            ).then(ja => {
+              if (!ja) { fileInput.value = ''; return; }
+              const reader = new FileReader();
+              reader.onload = () => {
+                if (App.data.importJSON(reader.result)) {
+                  closeModal();
+                  init();
+                  toast('Sicherung wiederhergestellt', 'ok');
+                } else {
+                  toast('Ungültige Sicherungsdatei', 'err');
+                }
+                fileInput.value = '';
+              };
+              reader.readAsText(file);
+            });
           });
 
           renderVideoStorage();
@@ -512,10 +572,12 @@ App.ui = (function () {
       const btn = e.target.closest('[data-vs-del]');
       if (!btn) return;
       const gameId = parseInt(btn.dataset.vsDel);
-      if (!confirm('Diese Aufnahme löschen?')) return;
-      App.video.remove(gameId).then(() => {
-        renderVideoStorage();
-        toast('Aufnahme gelöscht', 'ok');
+      askConfirm('Diese Aufnahme löschen?').then(ja => {
+        if (!ja) return;
+        App.video.remove(gameId).then(() => {
+          renderVideoStorage();
+          toast('Aufnahme gelöscht', 'ok');
+        });
       });
     };
   }
@@ -557,7 +619,7 @@ App.ui = (function () {
     navigate('dashboard');
   }
 
-  return { openModal, closeModal, toast, openShotModal, openOpponentShotModal, navigate, init, toggleTheme };
+  return { openModal, closeModal, toast, askConfirm, openShotModal, openOpponentShotModal, navigate, init, toggleTheme };
 })();
 
 App.ui.init();

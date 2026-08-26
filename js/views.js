@@ -485,10 +485,14 @@ App.views = (function () {
       document.getElementById('btn-clear-shots').addEventListener('click', function () {
         const shots = isOwn ? App.data.getShots(activeGameId) : App.data.getOpponentShots(activeGameId);
         if (shots.length === 0) return;
-        if (!confirm(`Alle ${shots.length} ${isOwn ? '' : 'Gegner-'}Würfe für dieses Spiel löschen?`)) return;
-        shots.forEach(s => isOwn ? App.data.deleteShot(s.id) : App.data.deleteOpponentShot(s.id));
-        refresh();
-        App.ui.toast('Würfe gelöscht', 'ok');
+        App.ui.askConfirm(
+          `Alle ${shots.length} ${isOwn ? '' : 'Gegner-'}Würfe für dieses Spiel löschen?`
+        ).then(ja => {
+          if (!ja) return;
+          shots.forEach(s => isOwn ? App.data.deleteShot(s.id) : App.data.deleteOpponentShot(s.id));
+          refresh();
+          App.ui.toast('Würfe gelöscht', 'ok');
+        });
       });
     }
 
@@ -971,11 +975,13 @@ App.views = (function () {
     });
 
     removeBtn.addEventListener('click', () => {
-      if (!confirm('Gespeicherte Aufnahme für dieses Spiel löschen?')) return;
-      App.video.remove(currentGameId).then(() => {
-        refreshVideoUI();
-        refreshRecent();
-        App.ui.toast('Aufnahme gelöscht', 'ok');
+      App.ui.askConfirm('Gespeicherte Aufnahme für dieses Spiel löschen?').then(ja => {
+        if (!ja) return;
+        App.video.remove(currentGameId).then(() => {
+          refreshVideoUI();
+          refreshRecent();
+          App.ui.toast('Aufnahme gelöscht', 'ok');
+        });
       });
     });
 

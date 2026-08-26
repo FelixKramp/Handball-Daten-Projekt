@@ -1449,3 +1449,18 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
   .matchform-check-group .outcome-btn { padding: 18px 8px; }
   .modal-matchform .live-player-btn { min-height: 52px; }
 }
+
+/* ── Rückfrage vor löschenden Aktionen ──────────────────────────────
+   Liegt über dem normalen Modal, damit die Rückfrage aus einem
+   geöffneten Formular heraus (z.B. "Spieler bearbeiten") funktioniert,
+   ohne dieses zu überschreiben. */
+.confirm-backdrop { z-index: 1100; }
+.confirm-box { max-width: 400px; }
+.confirm-box .modal-body { padding: 22px; }
+.confirm-text {
+  margin: 0 0 4px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.confirm-box .form-actions { margin-top: 18px; }
