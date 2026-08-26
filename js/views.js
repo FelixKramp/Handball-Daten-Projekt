@@ -189,6 +189,10 @@ App.views = (function () {
           </select>
         </div>
       </div>
+      <div class="form-group">
+        <label>Handball-ID <span class="text-muted" style="font-weight:400">(optional, z.B. DE1234567)</span></label>
+        <input class="form-control" id="f-handballid" value="${p.handballId || ''}" placeholder="DE1234567">
+      </div>
       <div class="form-row3">
         <div class="form-group">
           <label>Assists</label>
@@ -216,6 +220,7 @@ App.views = (function () {
       lastname,
       number:      parseInt(document.getElementById('f-number')?.value) || 0,
       position:    document.getElementById('f-position')?.value || '',
+      handballId:  document.getElementById('f-handballid')?.value.trim() || '',
       assists:     parseInt(document.getElementById('f-assists')?.value) || 0,
       yellowCards: parseInt(document.getElementById('f-yellow')?.value) || 0,
       redCards:    parseInt(document.getElementById('f-red')?.value) || 0,

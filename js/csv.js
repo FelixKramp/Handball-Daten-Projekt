@@ -1,12 +1,25 @@
-// csv.js — CSV-Import für den Spielplan (Alternative/Ergänzung zur API)
+// csv.js — CSV-Import für Spielplan und Kader (Alternative/Ergänzung zur API)
 window.App = window.App || {};
 
 App.csv = (function () {
 
-  const TEMPLATE =
-    'Datum;Gegner;Heim/Auswärts;Tore eigene;Tore Gegner\n' +
-    '15.09.2026;TSV Musterstadt;H;28;24\n' +
-    '22.09.2026;HSG Beispiel;A;;\n';
+  const TEMPLATES = {
+    schedule: {
+      filename: 'spielplan-vorlage.csv',
+      text:
+        'Datum;Gegner;Heim/Auswärts;Tore eigene;Tore Gegner\n' +
+        '15.09.2026;TSV Musterstadt;H;28;24\n' +
+        '22.09.2026;HSG Beispiel;A;;\n',
+    },
+    squad: {
+      filename: 'kader-vorlage.csv',
+      text:
+        'Nummer;Vorname;Nachname;Position;Handball-ID\n' +
+        '1;Max;Mustermann;Torwart;DE1234567\n' +
+        '7;Lars;Beispiel;Rückraum links;\n' +
+        '12;Jonas;Muster;KA;\n',
+    },
+  };
 
   /** Erkennt Trennzeichen an der Kopfzeile — deutsches Excel exportiert meist mit Semikolon. */
   function detectDelimiter(headerLine) {
@@ -98,15 +111,91 @@ App.csv = (function () {
     return { games, errors };
   }
 
-  function downloadTemplate() {
-    const blob = new Blob([TEMPLATE], { type: 'text/csv' });
+  // ── Kader ──────────────────────────────────────────────────────────
+
+  /**
+   * Positionen dürfen als Kürzel (wie in der App) oder ausgeschrieben stehen —
+   * ein Trainer soll die Kürzel-Tabelle nicht auswendig können müssen.
+   */
+  const POSITION_ALIASES = {
+    'th': 'TH', 'tw': 'TH', 'torwart': 'TH', 'torhüter': 'TH', 'torhueter': 'TH', 'keeper': 'TH',
+    'rl': 'RL', 'rechtsaußen': 'RL', 'rechtsaussen': 'RL', 'ra außen': 'RL',
+    'll': 'LL', 'linksaußen': 'LL', 'linksaussen': 'LL',
+    'rm': 'RM', 'rechtsmitte': 'RM',
+    'lm': 'LM', 'linksmitte': 'LM', 'mitte': 'LM', 'mittelmann': 'LM', 'rückraum mitte': 'LM', 'rueckraum mitte': 'LM',
+    'ra': 'RA', 'rückraum rechts': 'RA', 'rueckraum rechts': 'RA',
+    'la': 'LA', 'rückraum links': 'LA', 'rueckraum links': 'LA',
+    'ka': 'KA', 'kreisläufer': 'KA', 'kreislaeufer': 'KA', 'kreis': 'KA',
+    'pf': 'PF', 'pivot': 'PF',
+  };
+
+  function parsePosition(raw) {
+    const s = String(raw || '').trim().toLowerCase();
+    if (!s) return '';
+    return POSITION_ALIASES[s] || '';
+  }
+
+  /** Kopfzeilen-Varianten, die dasselbe Feld meinen. */
+  function pick(row, ...keys) {
+    for (const k of keys) {
+      if (row[k] !== undefined && row[k] !== '') return row[k];
+    }
+    return '';
+  }
+
+  /**
+   * Wandelt CSV-Text in Spieler im internen Format um.
+   * @returns {{players: object[], errors: string[]}}
+   */
+  function parsePlayersFromCsv(text) {
+    const rows = parseCsv(text);
+    const players = [];
+    const errors = [];
+
+    rows.forEach((row, i) => {
+      const lineNo = i + 2;
+
+      const firstname = String(pick(row, 'vorname')).trim();
+      const lastname  = String(pick(row, 'nachname', 'name')).trim();
+      if (!firstname && !lastname) { errors.push(`Zeile ${lineNo}: Name fehlt`); return; }
+
+      const numberRaw = pick(row, 'nummer', 'rückennummer', 'rueckennummer', 'trikotnummer');
+      const number = parseInt(numberRaw, 10);
+      if (numberRaw !== '' && (isNaN(number) || number < 1 || number > 99)) {
+        errors.push(`Zeile ${lineNo}: Rückennummer "${numberRaw}" ungültig (1–99)`);
+        return;
+      }
+
+      const posRaw = pick(row, 'position', 'pos');
+      const position = parsePosition(posRaw);
+      if (posRaw && !position) {
+        errors.push(`Zeile ${lineNo}: Position "${posRaw}" nicht erkannt`);
+        return;
+      }
+
+      players.push({
+        name: [firstname, lastname].filter(Boolean).join(' '),
+        firstname,
+        lastname,
+        number: isNaN(number) ? 0 : number,
+        position,
+        handballId: String(pick(row, 'handball-id', 'handballid', 'handball id')).trim(),
+      });
+    });
+
+    return { players, errors };
+  }
+
+  function downloadTemplate(kind) {
+    const tpl = TEMPLATES[kind] || TEMPLATES.schedule;
+    const blob = new Blob([tpl.text], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = 'spielplan-vorlage.csv';
+    a.download = tpl.filename;
     a.click();
     URL.revokeObjectURL(url);
   }
 
-  return { parseGamesFromCsv, downloadTemplate };
+  return { parseGamesFromCsv, parsePlayersFromCsv, downloadTemplate };
 })();

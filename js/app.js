@@ -193,7 +193,13 @@ App.ui = (function () {
 
     // Render topbar actions per view
     if (viewId === 'squad') {
-      topbarActs.innerHTML = `<button class="btn btn-primary" data-action="add-player">+ Spieler</button>`;
+      topbarActs.innerHTML = `
+        <button class="btn btn-outline" data-action="import-squad-csv">↓ CSV laden</button>
+        <button class="btn btn-outline" data-action="download-squad-template">Vorlage</button>
+        <button class="btn btn-primary" data-action="add-player">+ Spieler</button>
+        <input type="file" id="f-squad-import" accept=".csv,text/csv" style="display:none">
+      `;
+      document.getElementById('f-squad-import')?.addEventListener('change', handleSquadCsvFile);
     } else if (viewId === 'schedule') {
       topbarActs.innerHTML = `
         <button class="btn btn-outline" data-action="import-api">↓ API laden</button>
@@ -229,6 +235,31 @@ App.ui = (function () {
       if (errors.length > 0) console.warn('CSV-Import — übersprungene Zeilen:\n' + errors.join('\n'));
 
       navigate('schedule');
+      input.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  // ── CSV-Import (Kader) ──────────────────────────────────────────────
+  function handleSquadCsvFile(e) {
+    const input = e.target;
+    const file  = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { players, errors } = App.csv.parsePlayersFromCsv(reader.result);
+      const { added, updated } = App.data.importPlayers(players);
+
+      const parts = [];
+      if (added)   parts.push(`${added} Spieler neu`);
+      if (updated) parts.push(`${updated} aktualisiert`);
+      if (errors.length) parts.push(`${errors.length} Zeile${errors.length === 1 ? '' : 'n'} übersprungen`);
+      toast(parts.length ? parts.join(', ') : 'Nichts importiert', errors.length ? 'inf' : 'ok');
+
+      if (errors.length > 0) console.warn('Kader-Import — übersprungene Zeilen:\n' + errors.join('\n'));
+
+      navigate('squad');
       input.value = '';
     };
     reader.readAsText(file);
@@ -367,7 +398,15 @@ App.ui = (function () {
         break;
 
       case 'download-csv-template':
-        App.csv.downloadTemplate();
+        App.csv.downloadTemplate('schedule');
+        break;
+
+      case 'import-squad-csv':
+        document.getElementById('f-squad-import')?.click();
+        break;
+
+      case 'download-squad-template':
+        App.csv.downloadTemplate('squad');
         break;
 
       case 'settings': {

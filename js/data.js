@@ -69,6 +69,48 @@ App.data = (function () {
       persist(state);
     },
 
+    /**
+     * Kader aus CSV übernehmen. Bekannte Spieler werden aktualisiert statt
+     * doppelt angelegt — so kann man eine korrigierte Liste einfach erneut
+     * hochladen. Erkannt wird über die Handball-ID (stabil, falls vorhanden),
+     * sonst über den Namen. Bewusst NICHT über die Rückennummer: die wechselt,
+     * und dann stünde derselbe Spieler zweimal im Kader.
+     * Erfasste Statistiken (Tore, Strafen …) bleiben unangetastet.
+     */
+    importPlayers(players) {
+      let added = 0;
+      let updated = 0;
+
+      players.forEach(incoming => {
+        const key = String(incoming.handballId || '').trim().toLowerCase();
+        const name = String(incoming.name || '').trim().toLowerCase();
+
+        const existing = state.players.find(p => {
+          const pKey = String(p.handballId || '').trim().toLowerCase();
+          if (key && pKey) return pKey === key;
+          return String(p.name || '').trim().toLowerCase() === name;
+        });
+
+        if (existing) {
+          Object.assign(existing, {
+            name:       incoming.name,
+            firstname:  incoming.firstname,
+            lastname:   incoming.lastname,
+            number:     incoming.number,
+            position:   incoming.position,
+            handballId: incoming.handballId || existing.handballId || '',
+          });
+          updated++;
+        } else {
+          this.addPlayer(incoming);
+          added++;
+        }
+      });
+
+      persist(state);
+      return { added, updated };
+    },
+
     // ── Games ─────────────────────────────────────────────
     getGames() {
       return [...state.games].sort((a, b) => new Date(b.date) - new Date(a.date));
