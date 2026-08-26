@@ -1356,7 +1356,12 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
    SVG-Präsentationsattribute haben Spezifität 0 und werden von jeder
    CSS-Regel überschrieben. */
 .modal-matchform .court-svg rect { fill: none !important; stroke: var(--form-rule-strong) !important; }
-.modal-matchform .court-svg path { fill: none !important; stroke: var(--form-ink-dim) !important; }
+/* :not(.zone-chip-bg) ist Pflicht, nicht Kosmetik: die Wurfzonen sind ebenfalls
+   <path>. Mit fill:none wird ihre Flaeche unklickbar (pointer-events reagieren
+   nur auf Gemaltes), es bliebe nur der haarduenne Rand. Der 7m-Punkt ist ein
+   <circle> und war deshalb als einzige Zone weiter treffbar. Gleiche Ausnahme
+   wie in der circle-Regel unten. */
+.modal-matchform .court-svg path:not(.zone-chip-bg) { fill: none !important; stroke: var(--form-ink-dim) !important; }
 .modal-matchform .court-svg line { stroke: var(--form-ink-dim) !important; }
 .modal-matchform .court-svg circle:not(.zone-chip-bg) { fill: var(--form-ink-dim) !important; stroke: none !important; }
 
