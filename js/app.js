@@ -129,7 +129,6 @@ App.ui = (function () {
           <option value="goal">Tor</option>
           <option value="miss">Fehlschuss</option>
           <option value="block">Geblockt</option>
-          <option value="post">Pfosten</option>
         </select>
       </div>
       <div class="form-group">
@@ -175,7 +174,6 @@ App.ui = (function () {
           <option value="goal">Tor</option>
           <option value="miss">Fehlschuss</option>
           <option value="block">Geblockt</option>
-          <option value="post">Pfosten</option>
         </select>
       </div>
       <div class="form-group">

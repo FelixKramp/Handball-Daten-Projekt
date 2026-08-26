@@ -800,19 +800,17 @@ App.views = (function () {
           <div class="live-quick-panel matchform-panel">
             <div class="live-quick-label matchform-panel-label">Unsere Würfe</div>
             <div class="outcome-btn-group matchform-check-group">
-              <button class="outcome-btn ob-goal"  data-side="own" data-oc="goal">Tor</button>
+              <button class="outcome-btn ob-goal ob-wide"  data-side="own" data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-side="own" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="own" data-oc="block">Geblockt</button>
-              <button class="outcome-btn ob-post"  data-side="own" data-oc="post">Pfosten</button>
             </div>
           </div>
           <div class="live-quick-panel matchform-panel">
             <div class="live-quick-label matchform-panel-label">Gegner-Würfe</div>
             <div class="outcome-btn-group matchform-check-group">
-              <button class="outcome-btn ob-goal"  data-side="opp" data-oc="goal">Tor</button>
+              <button class="outcome-btn ob-goal ob-wide"  data-side="opp" data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-side="opp" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="opp" data-oc="block">Geblockt</button>
-              <button class="outcome-btn ob-post"  data-side="opp" data-oc="post">Pfosten</button>
             </div>
           </div>
         </div>
@@ -1070,6 +1068,85 @@ App.views = (function () {
       { id:'bl', label:'UL' }, { id:'bm', label:'UM' }, { id:'br', label:'UR' },
     ];
 
+    // ── Sortierung der Spielerknöpfe ────────────────────────────────
+    // Reihenfolge quer übers Feld: Torwart, dann von links nach rechts,
+    // Kreis zum Schluss — so, wie man eine Aufstellung aufsagt.
+    const POS_ORDER = ['TH', 'LL', 'LA', 'LM', 'RM', 'RA', 'RL', 'KA', 'PF'];
+    const SORT_KEY  = 'hb_player_sort';
+
+    function getPlayerSort() {
+      const v = localStorage.getItem(SORT_KEY);
+      return ['number', 'position', 'goals'].includes(v) ? v : 'position';
+    }
+    function setPlayerSort(v) { localStorage.setItem(SORT_KEY, v); }
+
+    /**
+     * @param {number} gameId  Tore werden nur aus DIESEM Spiel gezählt —
+     *   während der Partie sollen die hochwandern, die heute treffen.
+     */
+    function sortPlayers(players, mode, gameId) {
+      const byNumber = (a, b) => (a.number || 999) - (b.number || 999);
+      const list = [...players];
+
+      if (mode === 'position') {
+        return list.sort((a, b) => {
+          // Spieler ohne Position ans Ende statt an den Anfang.
+          const ia = POS_ORDER.indexOf(a.position); const ib = POS_ORDER.indexOf(b.position);
+          const ra = ia < 0 ? POS_ORDER.length : ia;  const rb = ib < 0 ? POS_ORDER.length : ib;
+          return ra !== rb ? ra - rb : byNumber(a, b);
+        });
+      }
+      if (mode === 'goals') {
+        const shots = App.data.getShots(gameId);
+        const tore = id => shots.filter(s => s.playerId === id && s.outcome === 'goal').length;
+        return list.sort((a, b) => {
+          const d = tore(b.id) - tore(a.id);
+          // Beim Anpfiff stehen alle bei 0 — dann entscheidet die Nummer,
+          // damit die Knöpfe nicht in zufälliger Reihenfolge stehen.
+          return d !== 0 ? d : byNumber(a, b);
+        });
+      }
+      return list.sort(byNumber);
+    }
+
+    function playerButtonsHTML(players, mode, gameId) {
+      return sortPlayers(players, mode, gameId).map(p => `
+        <button class="live-player-btn" data-pid="${p.id}">
+          <span class="pnum">${p.number}</span>
+          <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
+        </button>`).join('');
+    }
+
+    const SORT_LABELS = { number: 'Nummer', position: 'Position', goals: 'Tore' };
+
+    /**
+     * Stammposition des Spielers → vorbelegter Wurfort auf dem Feld.
+     *
+     * ACHTUNG, die Kürzel sind zwischen Kader und Feld nicht deckungsgleich:
+     * im Kader heißt 'LA' Rückraum links, auf dem Feld heißt die Zone 'la'
+     * dagegen Linksaußen. Deshalb steht hier jede Zuordnung ausgeschrieben.
+     *
+     * Torwart bleibt bewusst ohne Zuordnung — von dort wird nicht geworfen.
+     */
+    const STAMMPOSITION_ZONE = {
+      LL: 'la',    // Linksaußen        → Zone Linksaußen
+      RL: 'ra',    // Rechtsaußen       → Zone Rechtsaußen
+      KA: 'km',    // Kreisläufer       → Zone Kreis
+      PF: 'km',    // Pivot             → Zone Kreis
+      LA: 'hld',   // Rückraum links    → Halblinks Distanz
+      RA: 'hrd',   // Rückraum rechts   → Halbrechts Distanz
+      LM: 'md',    // Linksmitte        → Mitte Distanz
+      RM: 'md',    // Rechtsmitte       → Mitte Distanz
+    };
+
+    function sortSwitchHTML(mode) {
+      return `<div class="player-sort" id="lm-sort">
+        ${Object.entries(SORT_LABELS).map(([k, label]) =>
+          `<button type="button" class="player-sort-btn${k === mode ? ' active' : ''}" data-sort="${k}">${label}</button>`
+        ).join('')}
+      </div>`;
+    }
+
     function openAttackModal(gameId, autoMinute, presetOutcome) {
       const players = App.data.getPlayers();
       let selectedPlayerId = null;
@@ -1077,6 +1154,9 @@ App.views = (function () {
       let selectedPosition = null;
       let selectedPos      = null;
       let selectedGoalZone = null;
+      // Merkt, ob der Wurfort angetippt wurde. Nur eine automatische
+      // Vorbelegung darf später wieder ersetzt werden.
+      let zoneVonHand      = false;
       const showZone = !presetOutcome || presetOutcome === 'goal';
 
       const html = `
@@ -1088,13 +1168,12 @@ App.views = (function () {
           <div class="lm-2col">
             ${players.length > 0 ? `
             <div class="form-group">
-              <label>Spieler</label>
+              <div class="label-row">
+                <label>Spieler</label>
+                ${sortSwitchHTML(getPlayerSort())}
+              </div>
               <div class="live-player-grid" id="lm-players">
-                ${players.map(p => `
-                  <button class="live-player-btn" data-pid="${p.id}">
-                    <span class="pnum">${p.number}</span>
-                    <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
-                  </button>`).join('')}
+                ${playerButtonsHTML(players, getPlayerSort(), gameId)}
               </div>
             </div>` : ''}
             ${showZone ? `
@@ -1109,10 +1188,9 @@ App.views = (function () {
           <div class="form-group">
             <label>Ergebnis</label>
             <div class="outcome-btn-group">
-              <button class="outcome-btn ob-goal"  data-oc="goal">Tor</button>
+              <button class="outcome-btn ob-goal ob-wide"  data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
-              <button class="outcome-btn ob-post"  data-oc="post">Pfosten</button>
             </div>
           </div>` : ''}
           <div class="form-group">
@@ -1133,10 +1211,16 @@ App.views = (function () {
         const courtSvg = App.court.build();
         courtSvg.setAttribute('viewBox', '350 0 450 400'); // crop to attack half
         document.getElementById('lm-court-wrap').appendChild(courtSvg);
+        function markZone(zoneId) {
+          courtSvg.querySelectorAll('.zone-chip').forEach(c =>
+            c.classList.toggle('selected', c.dataset.zone === zoneId));
+        }
+
         App.court.renderZones(courtSvg, 'own', (zoneId, pos) => {
           selectedPosition = zoneId;
           selectedPos = pos;
-          courtSvg.querySelectorAll('.zone-chip').forEach(c => c.classList.toggle('selected', c.dataset.zone === zoneId));
+          zoneVonHand = true;   // ab jetzt nichts mehr automatisch überschreiben
+          markZone(zoneId);
           document.getElementById('lm-below-court')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
@@ -1146,6 +1230,33 @@ App.views = (function () {
           selectedPlayerId = parseInt(btn.dataset.pid);
           document.querySelectorAll('.live-player-btn').forEach(b => b.classList.remove('selected'));
           btn.classList.add('selected');
+
+          // Wurfort aus der Stammposition vorbelegen. Nur solange das Feld
+          // nicht von Hand angetippt wurde — eine bewusste Auswahl darf ein
+          // Spielerwechsel nie stillschweigend überschreiben.
+          if (zoneVonHand) return;
+          const zone = STAMMPOSITION_ZONE[App.data.getPlayer(selectedPlayerId)?.position];
+          if (!zone) { selectedPosition = null; selectedPos = null; markZone(null); return; }
+          selectedPosition = zone;
+          selectedPos = App.court.zoneCenterRel(zone, 'own');
+          markZone(zone);
+        });
+
+        // Umsortieren: Reihenfolge merken und neu zeichnen. Eine bereits
+        // getroffene Auswahl bleibt bestehen — sonst wäre ein Umschalten
+        // mitten im Eintragen ein stiller Datenverlust.
+        document.getElementById('lm-sort')?.addEventListener('click', e => {
+          const btn = e.target.closest('[data-sort]');
+          if (!btn) return;
+          const mode = btn.dataset.sort;
+          setPlayerSort(mode);
+          document.querySelectorAll('.player-sort-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.sort === mode));
+          const grid = document.getElementById('lm-players');
+          grid.innerHTML = playerButtonsHTML(players, mode, gameId);
+          if (selectedPlayerId != null) {
+            grid.querySelector(`[data-pid="${selectedPlayerId}"]`)?.classList.add('selected');
+          }
         });
 
         if (!presetOutcome) {
@@ -1217,10 +1328,9 @@ App.views = (function () {
         <div class="form-group">
           <label>Ergebnis</label>
           <div class="outcome-btn-group">
-            <button class="outcome-btn ob-goal"  data-oc="goal">Tor</button>
+            <button class="outcome-btn ob-goal ob-wide"  data-oc="goal">Tor</button>
             <button class="outcome-btn ob-miss"  data-oc="miss">Fehlschuss</button>
             <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
-            <button class="outcome-btn ob-post"  data-oc="post">Pfosten</button>
           </div>
         </div>` : ''}
         ${showZone ? `
