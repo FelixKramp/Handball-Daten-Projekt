@@ -754,6 +754,7 @@ App.views = (function () {
           <select class="form-control live-game-select" id="live-game-select">
             ${games.map(g => `<option value="${g.id}" ${g.id === defaultGame.id ? 'selected' : ''}>${dateFmt(g.date)} – ${g.opponent}${g.played ? ' ✓' : ''}</option>`).join('')}
           </select>
+          <button class="btn btn-outline btn-sm" id="btn-matchday-squad" type="button">Spieltagskader</button>
         </div>
 
         <div class="live-header matchform-scoreboard">
@@ -1058,7 +1059,24 @@ App.views = (function () {
       currentGameId = parseInt(this.value);
       refreshScore();
       refreshRecent();
+      refreshSquadButton();
       ladeGespeichertesVideo();   // jedes Spiel hat seine eigene Aufnahme
+    });
+
+    // ── Spieltagskader ─────────────────────────────────────────────
+    function refreshSquadButton() {
+      const btn = document.getElementById('btn-matchday-squad');
+      if (!btn) return;
+      const gesetzt = App.data.hasMatchdaySquad(currentGameId);
+      const anzahl  = App.data.getMatchdaySquad(currentGameId).length;
+      btn.textContent = gesetzt ? `Spieltagskader (${anzahl})` : 'Spieltagskader';
+      btn.classList.toggle('btn-primary', gesetzt);
+      btn.classList.toggle('btn-outline', !gesetzt);
+    }
+    refreshSquadButton();
+
+    document.getElementById('btn-matchday-squad')?.addEventListener('click', () => {
+      openMatchdaySquadModal(currentGameId, refreshSquadButton);
     });
 
     // ── Attack modal ───────────────────────────────────────────────
@@ -1147,8 +1165,87 @@ App.views = (function () {
       </div>`;
     }
 
+    /**
+     * Auswahl, wer heute mitspielt. Beim ersten Öffnen ist der Kader des
+     * letzten Spiels vorgeschlagen — man hakt nur die Ausfälle ab.
+     */
+    function openMatchdaySquadModal(gameId, onSave) {
+      const alle = App.data.getPlayers();
+      if (alle.length === 0) {
+        App.ui.toast('Lege zuerst einen Kader an', 'inf');
+        return;
+      }
+
+      const start = App.data.hasMatchdaySquad(gameId)
+        ? App.data.getMatchdaySquad(gameId).map(p => p.id)
+        : App.data.suggestMatchdaySquad(gameId);
+      const dabei = new Set(start);
+
+      const liste = sortPlayers(alle, 'position', gameId).map(p => `
+        <button type="button" class="squad-pick${dabei.has(p.id) ? ' on' : ''}" data-pid="${p.id}">
+          <span class="sp-num">${p.number || '–'}</span>
+          <span class="sp-name">${p.name}</span>
+          <span class="sp-pos">${POS_LABELS[p.position] || ''}</span>
+        </button>`).join('');
+
+      App.ui.openModal('Spieltagskader', `
+        <p class="text-muted" style="font-size:12.5px;margin:-4px 0 12px">
+          Nur diese Spieler stehen beim Eintragen zur Auswahl. Gilt für dieses Spiel.
+        </p>
+        <div class="squad-pick-actions">
+          <button class="btn btn-ghost btn-sm" id="sq-all" type="button">Alle</button>
+          <button class="btn btn-ghost btn-sm" id="sq-none" type="button">Keinen</button>
+          <span class="squad-count" id="sq-count"></span>
+        </div>
+        <div class="squad-pick-grid" id="sq-grid">${liste}</div>
+        <div class="form-actions">
+          <button class="btn btn-outline" onclick="App.ui.closeModal()">Abbrechen</button>
+          <button class="btn btn-primary" id="sq-save">Übernehmen</button>
+        </div>`);
+
+      setTimeout(() => {
+        const grid  = document.getElementById('sq-grid');
+        const count = document.getElementById('sq-count');
+        const zeige = () => { count.textContent = `${dabei.size} von ${alle.length}`; };
+        zeige();
+
+        grid.addEventListener('click', e => {
+          const btn = e.target.closest('[data-pid]');
+          if (!btn) return;
+          const id = parseInt(btn.dataset.pid);
+          if (dabei.has(id)) dabei.delete(id); else dabei.add(id);
+          btn.classList.toggle('on', dabei.has(id));
+          zeige();
+        });
+
+        const setzeAlle = an => {
+          dabei.clear();
+          if (an) alle.forEach(p => dabei.add(p.id));
+          grid.querySelectorAll('[data-pid]').forEach(b =>
+            b.classList.toggle('on', dabei.has(parseInt(b.dataset.pid))));
+          zeige();
+        };
+        document.getElementById('sq-all').addEventListener('click', () => setzeAlle(true));
+        document.getElementById('sq-none').addEventListener('click', () => setzeAlle(false));
+
+        document.getElementById('sq-save').addEventListener('click', () => {
+          App.data.setMatchdaySquad(gameId, [...dabei]);
+          App.ui.closeModal();
+          App.ui.toast(`Spieltagskader: ${dabei.size} Spieler`, 'ok');
+          if (onSave) onSave();
+        });
+      }, 0);
+    }
+
     function openAttackModal(gameId, autoMinute, presetOutcome) {
-      const players = App.data.getPlayers();
+      // Nur wer heute dabei ist. Der Umschalter im Fenster blendet bei Bedarf
+      // den ganzen Kader ein, ohne den Spieltagskader zu ändern.
+      let alleZeigen = false;
+      const kaderKomplett = App.data.getPlayers();
+      const kaderHeute    = App.data.getMatchdaySquad(gameId);
+      const eingeschraenkt = App.data.hasMatchdaySquad(gameId)
+                             && kaderHeute.length < kaderKomplett.length;
+      let players = eingeschraenkt ? kaderHeute : kaderKomplett;
       let selectedPlayerId = null;
       let selectedOutcome  = presetOutcome || null;
       let selectedPosition = null;
@@ -1175,6 +1272,10 @@ App.views = (function () {
               <div class="live-player-grid" id="lm-players">
                 ${playerButtonsHTML(players, getPlayerSort(), gameId)}
               </div>
+              ${eingeschraenkt ? `
+              <button type="button" class="squad-toggle" id="lm-show-all">
+                Spieltagskader · alle ${kaderKomplett.length} anzeigen
+              </button>` : ''}
             </div>` : ''}
             ${showZone ? `
             <div class="form-group">
@@ -1254,6 +1355,23 @@ App.views = (function () {
             b.classList.toggle('active', b.dataset.sort === mode));
           const grid = document.getElementById('lm-players');
           grid.innerHTML = playerButtonsHTML(players, mode, gameId);
+          if (selectedPlayerId != null) {
+            grid.querySelector(`[data-pid="${selectedPlayerId}"]`)?.classList.add('selected');
+          }
+        });
+
+        // Kurzzeitig den ganzen Kader zeigen, falls jemand trifft, der nicht
+        // im Spieltagskader steht. Ändert den Spieltagskader NICHT — sonst
+        // würde ein Nachtragen im Spiel unbemerkt die Aufstellung umschreiben.
+        document.getElementById('lm-show-all')?.addEventListener('click', function () {
+          alleZeigen = !alleZeigen;
+          players = alleZeigen ? kaderKomplett : kaderHeute;
+          this.textContent = alleZeigen
+            ? `Ganzer Kader · nur Spieltagskader (${kaderHeute.length}) zeigen`
+            : `Spieltagskader · alle ${kaderKomplett.length} anzeigen`;
+          this.classList.toggle('on', alleZeigen);
+          const grid = document.getElementById('lm-players');
+          grid.innerHTML = playerButtonsHTML(players, getPlayerSort(), gameId);
           if (selectedPlayerId != null) {
             grid.querySelector(`[data-pid="${selectedPlayerId}"]`)?.classList.add('selected');
           }

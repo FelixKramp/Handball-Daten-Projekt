@@ -160,6 +160,55 @@ App.data = (function () {
       return added;
     },
 
+    // ── Spieltagskader ────────────────────────────────────
+    //
+    // Pro Spiel eine Liste von Spieler-IDs. Fehlt sie (Altdaten oder noch
+    // nicht gesetzt), gilt der komplette Kader — dadurch aendert sich fuer
+    // bestehende Spiele nichts.
+
+    /** Spieler, die an diesem Spiel teilnehmen. Ohne gesetzten Kader: alle. */
+    getMatchdaySquad(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      const all = [...state.players];
+      if (!game || !Array.isArray(game.squad)) return all;
+      // Nach IDs filtern statt die IDs zu mappen: geloeschte Spieler fallen
+      // so von selbst raus, und die Kader-Reihenfolge bleibt die des Kaders.
+      return all.filter(p => game.squad.includes(p.id));
+    },
+
+    /** true, wenn fuer dieses Spiel ueberhaupt ein Kader festgelegt wurde. */
+    hasMatchdaySquad(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      return Boolean(game && Array.isArray(game.squad));
+    },
+
+    setMatchdaySquad(gameId, playerIds) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return null;
+      game.squad = [...playerIds];
+      persist(state);
+      return game.squad;
+    },
+
+    /**
+     * Vorschlag beim ersten Oeffnen: der Kader des zuletzt gespielten
+     * Spiels davor. So hakt man nur die Ausfaelle ab, statt jedes Mal
+     * von vorn auszuwaehlen. Gibt es keinen, zaehlt der ganze Kader.
+     */
+    suggestMatchdaySquad(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return state.players.map(p => p.id);
+
+      const frueher = state.games
+        .filter(g => g.id !== gameId && Array.isArray(g.squad) && g.date && g.date <= game.date)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+      if (!frueher) return state.players.map(p => p.id);
+      // Nur noch existierende Spieler uebernehmen.
+      const vorhanden = new Set(state.players.map(p => p.id));
+      return frueher.squad.filter(id => vorhanden.has(id));
+    },
+
     // ── Shots ─────────────────────────────────────────────
     getShots(gameId) {
       return gameId != null
