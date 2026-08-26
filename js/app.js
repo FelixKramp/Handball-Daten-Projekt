@@ -197,12 +197,41 @@ App.ui = (function () {
     } else if (viewId === 'schedule') {
       topbarActs.innerHTML = `
         <button class="btn btn-outline" data-action="import-api">↓ API laden</button>
+        <button class="btn btn-outline" data-action="import-csv">↓ CSV laden</button>
+        <button class="btn btn-outline" data-action="download-csv-template">Vorlage</button>
         <button class="btn btn-primary"  data-action="add-game">+ Spiel</button>
+        <input type="file" id="f-csv-import" accept=".csv,text/csv" style="display:none">
       `;
+      document.getElementById('f-csv-import')?.addEventListener('change', handleCsvFile);
     }
 
     view.render(content);
     window._currentView = viewId;
+  }
+
+  // ── CSV-Import (Spielplan) ──────────────────────────────────────────
+  function handleCsvFile(e) {
+    const input = e.target;
+    const file  = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { games, errors } = App.csv.parseGamesFromCsv(reader.result);
+      const added = App.data.importGames(games);
+      const skipped = games.length - added;
+
+      let msg = `${added} Spiel${added === 1 ? '' : 'e'} importiert`;
+      if (skipped > 0) msg += `, ${skipped} schon vorhanden`;
+      if (errors.length > 0) msg += `, ${errors.length} Zeile${errors.length === 1 ? '' : 'n'} übersprungen`;
+      toast(msg, errors.length > 0 ? 'inf' : 'ok');
+
+      if (errors.length > 0) console.warn('CSV-Import — übersprungene Zeilen:\n' + errors.join('\n'));
+
+      navigate('schedule');
+      input.value = '';
+    };
+    reader.readAsText(file);
   }
 
   // ── Event Delegation ─────────────────────────────────────────────
@@ -331,6 +360,14 @@ App.ui = (function () {
             navigate('schedule');
           })
           .catch(err => toast(`Fehler: ${err.message}`, 'err'));
+        break;
+
+      case 'import-csv':
+        document.getElementById('f-csv-import')?.click();
+        break;
+
+      case 'download-csv-template':
+        App.csv.downloadTemplate();
         break;
 
       case 'settings': {

@@ -97,11 +97,20 @@ App.data = (function () {
       persist(state);
     },
 
-    // Import games from API (skip if apiId already exists)
+    // Import games from API oder CSV (überspringt Spiele, die schon vorhanden sind)
     importGames(games) {
       let added = 0;
       games.forEach(g => {
-        if (g.apiId && state.games.some(eg => eg.apiId === g.apiId)) return;
+        // API-Spiele erkennt man an der apiId; CSV-Spiele haben keine, deshalb
+        // dort zusätzlich über Datum + Gegner prüfen (macht die CSV wiederholt
+        // hochladbar, ohne Dubletten zu erzeugen).
+        const duplicate = g.apiId
+          ? state.games.some(eg => eg.apiId === g.apiId)
+          : state.games.some(eg =>
+              eg.date === g.date &&
+              String(eg.opponent).trim().toLowerCase() === String(g.opponent).trim().toLowerCase()
+            );
+        if (duplicate) return;
         state.games.push({ id: nextId('game'), ...g });
         added++;
       });
