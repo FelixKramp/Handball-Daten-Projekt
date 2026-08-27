@@ -69,6 +69,48 @@ App.data = (function () {
       persist(state);
     },
 
+    /**
+     * Kader aus CSV übernehmen. Bekannte Spieler werden aktualisiert statt
+     * doppelt angelegt — so kann man eine korrigierte Liste einfach erneut
+     * hochladen. Erkannt wird über die Handball-ID (stabil, falls vorhanden),
+     * sonst über den Namen. Bewusst NICHT über die Rückennummer: die wechselt,
+     * und dann stünde derselbe Spieler zweimal im Kader.
+     * Erfasste Statistiken (Tore, Strafen …) bleiben unangetastet.
+     */
+    importPlayers(players) {
+      let added = 0;
+      let updated = 0;
+
+      players.forEach(incoming => {
+        const key = String(incoming.handballId || '').trim().toLowerCase();
+        const name = String(incoming.name || '').trim().toLowerCase();
+
+        const existing = state.players.find(p => {
+          const pKey = String(p.handballId || '').trim().toLowerCase();
+          if (key && pKey) return pKey === key;
+          return String(p.name || '').trim().toLowerCase() === name;
+        });
+
+        if (existing) {
+          Object.assign(existing, {
+            name:       incoming.name,
+            firstname:  incoming.firstname,
+            lastname:   incoming.lastname,
+            number:     incoming.number,
+            position:   incoming.position,
+            handballId: incoming.handballId || existing.handballId || '',
+          });
+          updated++;
+        } else {
+          this.addPlayer(incoming);
+          added++;
+        }
+      });
+
+      persist(state);
+      return { added, updated };
+    },
+
     // ── Games ─────────────────────────────────────────────
     getGames() {
       return [...state.games].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -97,16 +139,74 @@ App.data = (function () {
       persist(state);
     },
 
-    // Import games from API (skip if apiId already exists)
+    // Import games from API oder CSV (überspringt Spiele, die schon vorhanden sind)
     importGames(games) {
       let added = 0;
       games.forEach(g => {
-        if (g.apiId && state.games.some(eg => eg.apiId === g.apiId)) return;
+        // API-Spiele erkennt man an der apiId; CSV-Spiele haben keine, deshalb
+        // dort zusätzlich über Datum + Gegner prüfen (macht die CSV wiederholt
+        // hochladbar, ohne Dubletten zu erzeugen).
+        const duplicate = g.apiId
+          ? state.games.some(eg => eg.apiId === g.apiId)
+          : state.games.some(eg =>
+              eg.date === g.date &&
+              String(eg.opponent).trim().toLowerCase() === String(g.opponent).trim().toLowerCase()
+            );
+        if (duplicate) return;
         state.games.push({ id: nextId('game'), ...g });
         added++;
       });
       persist(state);
       return added;
+    },
+
+    // ── Spieltagskader ────────────────────────────────────
+    //
+    // Pro Spiel eine Liste von Spieler-IDs. Fehlt sie (Altdaten oder noch
+    // nicht gesetzt), gilt der komplette Kader — dadurch aendert sich fuer
+    // bestehende Spiele nichts.
+
+    /** Spieler, die an diesem Spiel teilnehmen. Ohne gesetzten Kader: alle. */
+    getMatchdaySquad(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      const all = [...state.players];
+      if (!game || !Array.isArray(game.squad)) return all;
+      // Nach IDs filtern statt die IDs zu mappen: geloeschte Spieler fallen
+      // so von selbst raus, und die Kader-Reihenfolge bleibt die des Kaders.
+      return all.filter(p => game.squad.includes(p.id));
+    },
+
+    /** true, wenn fuer dieses Spiel ueberhaupt ein Kader festgelegt wurde. */
+    hasMatchdaySquad(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      return Boolean(game && Array.isArray(game.squad));
+    },
+
+    setMatchdaySquad(gameId, playerIds) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return null;
+      game.squad = [...playerIds];
+      persist(state);
+      return game.squad;
+    },
+
+    /**
+     * Vorschlag beim ersten Oeffnen: der Kader des zuletzt gespielten
+     * Spiels davor. So hakt man nur die Ausfaelle ab, statt jedes Mal
+     * von vorn auszuwaehlen. Gibt es keinen, zaehlt der ganze Kader.
+     */
+    suggestMatchdaySquad(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return state.players.map(p => p.id);
+
+      const frueher = state.games
+        .filter(g => g.id !== gameId && Array.isArray(g.squad) && g.date && g.date <= game.date)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+      if (!frueher) return state.players.map(p => p.id);
+      // Nur noch existierende Spieler uebernehmen.
+      const vorhanden = new Set(state.players.map(p => p.id));
+      return frueher.squad.filter(id => vorhanden.has(id));
     },
 
     // ── Shots ─────────────────────────────────────────────

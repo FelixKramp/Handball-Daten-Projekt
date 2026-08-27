@@ -189,6 +189,10 @@ App.views = (function () {
           </select>
         </div>
       </div>
+      <div class="form-group">
+        <label>Handball-ID <span class="text-muted" style="font-weight:400">(optional, z.B. DE1234567)</span></label>
+        <input class="form-control" id="f-handballid" value="${p.handballId || ''}" placeholder="DE1234567">
+      </div>
       <div class="form-row3">
         <div class="form-group">
           <label>Assists</label>
@@ -216,6 +220,7 @@ App.views = (function () {
       lastname,
       number:      parseInt(document.getElementById('f-number')?.value) || 0,
       position:    document.getElementById('f-position')?.value || '',
+      handballId:  document.getElementById('f-handballid')?.value.trim() || '',
       assists:     parseInt(document.getElementById('f-assists')?.value) || 0,
       yellowCards: parseInt(document.getElementById('f-yellow')?.value) || 0,
       redCards:    parseInt(document.getElementById('f-red')?.value) || 0,
@@ -480,10 +485,14 @@ App.views = (function () {
       document.getElementById('btn-clear-shots').addEventListener('click', function () {
         const shots = isOwn ? App.data.getShots(activeGameId) : App.data.getOpponentShots(activeGameId);
         if (shots.length === 0) return;
-        if (!confirm(`Alle ${shots.length} ${isOwn ? '' : 'Gegner-'}Würfe für dieses Spiel löschen?`)) return;
-        shots.forEach(s => isOwn ? App.data.deleteShot(s.id) : App.data.deleteOpponentShot(s.id));
-        refresh();
-        App.ui.toast('Würfe gelöscht', 'ok');
+        App.ui.askConfirm(
+          `Alle ${shots.length} ${isOwn ? '' : 'Gegner-'}Würfe für dieses Spiel löschen?`
+        ).then(ja => {
+          if (!ja) return;
+          shots.forEach(s => isOwn ? App.data.deleteShot(s.id) : App.data.deleteOpponentShot(s.id));
+          refresh();
+          App.ui.toast('Würfe gelöscht', 'ok');
+        });
       });
     }
 
@@ -745,6 +754,7 @@ App.views = (function () {
           <select class="form-control live-game-select" id="live-game-select">
             ${games.map(g => `<option value="${g.id}" ${g.id === defaultGame.id ? 'selected' : ''}>${dateFmt(g.date)} – ${g.opponent}${g.played ? ' ✓' : ''}</option>`).join('')}
           </select>
+          <button class="btn btn-outline btn-sm" id="btn-matchday-squad" type="button">Spieltagskader</button>
         </div>
 
         <div class="live-header matchform-scoreboard">
@@ -791,19 +801,17 @@ App.views = (function () {
           <div class="live-quick-panel matchform-panel">
             <div class="live-quick-label matchform-panel-label">Unsere Würfe</div>
             <div class="outcome-btn-group matchform-check-group">
-              <button class="outcome-btn ob-goal"  data-side="own" data-oc="goal">Tor</button>
+              <button class="outcome-btn ob-goal ob-wide"  data-side="own" data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-side="own" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="own" data-oc="block">Geblockt</button>
-              <button class="outcome-btn ob-post"  data-side="own" data-oc="post">Pfosten</button>
             </div>
           </div>
           <div class="live-quick-panel matchform-panel">
             <div class="live-quick-label matchform-panel-label">Gegner-Würfe</div>
             <div class="outcome-btn-group matchform-check-group">
-              <button class="outcome-btn ob-goal"  data-side="opp" data-oc="goal">Tor</button>
+              <button class="outcome-btn ob-goal ob-wide"  data-side="opp" data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-side="opp" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="opp" data-oc="block">Geblockt</button>
-              <button class="outcome-btn ob-post"  data-side="opp" data-oc="post">Pfosten</button>
             </div>
           </div>
         </div>
@@ -966,11 +974,13 @@ App.views = (function () {
     });
 
     removeBtn.addEventListener('click', () => {
-      if (!confirm('Gespeicherte Aufnahme für dieses Spiel löschen?')) return;
-      App.video.remove(currentGameId).then(() => {
-        refreshVideoUI();
-        refreshRecent();
-        App.ui.toast('Aufnahme gelöscht', 'ok');
+      App.ui.askConfirm('Gespeicherte Aufnahme für dieses Spiel löschen?').then(ja => {
+        if (!ja) return;
+        App.video.remove(currentGameId).then(() => {
+          refreshVideoUI();
+          refreshRecent();
+          App.ui.toast('Aufnahme gelöscht', 'ok');
+        });
       });
     });
 
@@ -1049,7 +1059,24 @@ App.views = (function () {
       currentGameId = parseInt(this.value);
       refreshScore();
       refreshRecent();
+      refreshSquadButton();
       ladeGespeichertesVideo();   // jedes Spiel hat seine eigene Aufnahme
+    });
+
+    // ── Spieltagskader ─────────────────────────────────────────────
+    function refreshSquadButton() {
+      const btn = document.getElementById('btn-matchday-squad');
+      if (!btn) return;
+      const gesetzt = App.data.hasMatchdaySquad(currentGameId);
+      const anzahl  = App.data.getMatchdaySquad(currentGameId).length;
+      btn.textContent = gesetzt ? `Spieltagskader (${anzahl})` : 'Spieltagskader';
+      btn.classList.toggle('btn-primary', gesetzt);
+      btn.classList.toggle('btn-outline', !gesetzt);
+    }
+    refreshSquadButton();
+
+    document.getElementById('btn-matchday-squad')?.addEventListener('click', () => {
+      openMatchdaySquadModal(currentGameId, refreshSquadButton);
     });
 
     // ── Attack modal ───────────────────────────────────────────────
@@ -1059,13 +1086,174 @@ App.views = (function () {
       { id:'bl', label:'UL' }, { id:'bm', label:'UM' }, { id:'br', label:'UR' },
     ];
 
+    // ── Sortierung der Spielerknöpfe ────────────────────────────────
+    // Reihenfolge quer übers Feld: Torwart, dann von links nach rechts,
+    // Kreis zum Schluss — so, wie man eine Aufstellung aufsagt.
+    const POS_ORDER = ['TH', 'LL', 'LA', 'LM', 'RM', 'RA', 'RL', 'KA', 'PF'];
+    const SORT_KEY  = 'hb_player_sort';
+
+    function getPlayerSort() {
+      const v = localStorage.getItem(SORT_KEY);
+      return ['number', 'position', 'goals'].includes(v) ? v : 'position';
+    }
+    function setPlayerSort(v) { localStorage.setItem(SORT_KEY, v); }
+
+    /**
+     * @param {number} gameId  Tore werden nur aus DIESEM Spiel gezählt —
+     *   während der Partie sollen die hochwandern, die heute treffen.
+     */
+    function sortPlayers(players, mode, gameId) {
+      const byNumber = (a, b) => (a.number || 999) - (b.number || 999);
+      const list = [...players];
+
+      if (mode === 'position') {
+        return list.sort((a, b) => {
+          // Spieler ohne Position ans Ende statt an den Anfang.
+          const ia = POS_ORDER.indexOf(a.position); const ib = POS_ORDER.indexOf(b.position);
+          const ra = ia < 0 ? POS_ORDER.length : ia;  const rb = ib < 0 ? POS_ORDER.length : ib;
+          return ra !== rb ? ra - rb : byNumber(a, b);
+        });
+      }
+      if (mode === 'goals') {
+        const shots = App.data.getShots(gameId);
+        const tore = id => shots.filter(s => s.playerId === id && s.outcome === 'goal').length;
+        return list.sort((a, b) => {
+          const d = tore(b.id) - tore(a.id);
+          // Beim Anpfiff stehen alle bei 0 — dann entscheidet die Nummer,
+          // damit die Knöpfe nicht in zufälliger Reihenfolge stehen.
+          return d !== 0 ? d : byNumber(a, b);
+        });
+      }
+      return list.sort(byNumber);
+    }
+
+    function playerButtonsHTML(players, mode, gameId) {
+      return sortPlayers(players, mode, gameId).map(p => `
+        <button class="live-player-btn" data-pid="${p.id}">
+          <span class="pnum">${p.number}</span>
+          <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
+        </button>`).join('');
+    }
+
+    const SORT_LABELS = { number: 'Nummer', position: 'Position', goals: 'Tore' };
+
+    /**
+     * Stammposition des Spielers → vorbelegter Wurfort auf dem Feld.
+     *
+     * ACHTUNG, die Kürzel sind zwischen Kader und Feld nicht deckungsgleich:
+     * im Kader heißt 'LA' Rückraum links, auf dem Feld heißt die Zone 'la'
+     * dagegen Linksaußen. Deshalb steht hier jede Zuordnung ausgeschrieben.
+     *
+     * Torwart bleibt bewusst ohne Zuordnung — von dort wird nicht geworfen.
+     */
+    const STAMMPOSITION_ZONE = {
+      LL: 'la',    // Linksaußen        → Zone Linksaußen
+      RL: 'ra',    // Rechtsaußen       → Zone Rechtsaußen
+      KA: 'km',    // Kreisläufer       → Zone Kreis
+      PF: 'km',    // Pivot             → Zone Kreis
+      LA: 'hld',   // Rückraum links    → Halblinks Distanz
+      RA: 'hrd',   // Rückraum rechts   → Halbrechts Distanz
+      LM: 'md',    // Linksmitte        → Mitte Distanz
+      RM: 'md',    // Rechtsmitte       → Mitte Distanz
+    };
+
+    function sortSwitchHTML(mode) {
+      return `<div class="player-sort" id="lm-sort">
+        ${Object.entries(SORT_LABELS).map(([k, label]) =>
+          `<button type="button" class="player-sort-btn${k === mode ? ' active' : ''}" data-sort="${k}">${label}</button>`
+        ).join('')}
+      </div>`;
+    }
+
+    /**
+     * Auswahl, wer heute mitspielt. Beim ersten Öffnen ist der Kader des
+     * letzten Spiels vorgeschlagen — man hakt nur die Ausfälle ab.
+     */
+    function openMatchdaySquadModal(gameId, onSave) {
+      const alle = App.data.getPlayers();
+      if (alle.length === 0) {
+        App.ui.toast('Lege zuerst einen Kader an', 'inf');
+        return;
+      }
+
+      const start = App.data.hasMatchdaySquad(gameId)
+        ? App.data.getMatchdaySquad(gameId).map(p => p.id)
+        : App.data.suggestMatchdaySquad(gameId);
+      const dabei = new Set(start);
+
+      const liste = sortPlayers(alle, 'position', gameId).map(p => `
+        <button type="button" class="squad-pick${dabei.has(p.id) ? ' on' : ''}" data-pid="${p.id}">
+          <span class="sp-num">${p.number || '–'}</span>
+          <span class="sp-name">${p.name}</span>
+          <span class="sp-pos">${POS_LABELS[p.position] || ''}</span>
+        </button>`).join('');
+
+      App.ui.openModal('Spieltagskader', `
+        <p class="text-muted" style="font-size:12.5px;margin:-4px 0 12px">
+          Nur diese Spieler stehen beim Eintragen zur Auswahl. Gilt für dieses Spiel.
+        </p>
+        <div class="squad-pick-actions">
+          <button class="btn btn-ghost btn-sm" id="sq-all" type="button">Alle</button>
+          <button class="btn btn-ghost btn-sm" id="sq-none" type="button">Keinen</button>
+          <span class="squad-count" id="sq-count"></span>
+        </div>
+        <div class="squad-pick-grid" id="sq-grid">${liste}</div>
+        <div class="form-actions">
+          <button class="btn btn-outline" onclick="App.ui.closeModal()">Abbrechen</button>
+          <button class="btn btn-primary" id="sq-save">Übernehmen</button>
+        </div>`);
+
+      setTimeout(() => {
+        const grid  = document.getElementById('sq-grid');
+        const count = document.getElementById('sq-count');
+        const zeige = () => { count.textContent = `${dabei.size} von ${alle.length}`; };
+        zeige();
+
+        grid.addEventListener('click', e => {
+          const btn = e.target.closest('[data-pid]');
+          if (!btn) return;
+          const id = parseInt(btn.dataset.pid);
+          if (dabei.has(id)) dabei.delete(id); else dabei.add(id);
+          btn.classList.toggle('on', dabei.has(id));
+          zeige();
+        });
+
+        const setzeAlle = an => {
+          dabei.clear();
+          if (an) alle.forEach(p => dabei.add(p.id));
+          grid.querySelectorAll('[data-pid]').forEach(b =>
+            b.classList.toggle('on', dabei.has(parseInt(b.dataset.pid))));
+          zeige();
+        };
+        document.getElementById('sq-all').addEventListener('click', () => setzeAlle(true));
+        document.getElementById('sq-none').addEventListener('click', () => setzeAlle(false));
+
+        document.getElementById('sq-save').addEventListener('click', () => {
+          App.data.setMatchdaySquad(gameId, [...dabei]);
+          App.ui.closeModal();
+          App.ui.toast(`Spieltagskader: ${dabei.size} Spieler`, 'ok');
+          if (onSave) onSave();
+        });
+      }, 0);
+    }
+
     function openAttackModal(gameId, autoMinute, presetOutcome) {
-      const players = App.data.getPlayers();
+      // Nur wer heute dabei ist. Der Umschalter im Fenster blendet bei Bedarf
+      // den ganzen Kader ein, ohne den Spieltagskader zu ändern.
+      let alleZeigen = false;
+      const kaderKomplett = App.data.getPlayers();
+      const kaderHeute    = App.data.getMatchdaySquad(gameId);
+      const eingeschraenkt = App.data.hasMatchdaySquad(gameId)
+                             && kaderHeute.length < kaderKomplett.length;
+      let players = eingeschraenkt ? kaderHeute : kaderKomplett;
       let selectedPlayerId = null;
       let selectedOutcome  = presetOutcome || null;
       let selectedPosition = null;
       let selectedPos      = null;
       let selectedGoalZone = null;
+      // Merkt, ob der Wurfort angetippt wurde. Nur eine automatische
+      // Vorbelegung darf später wieder ersetzt werden.
+      let zoneVonHand      = false;
       const showZone = !presetOutcome || presetOutcome === 'goal';
 
       const html = `
@@ -1077,14 +1265,17 @@ App.views = (function () {
           <div class="lm-2col">
             ${players.length > 0 ? `
             <div class="form-group">
-              <label>Spieler</label>
-              <div class="live-player-grid" id="lm-players">
-                ${players.map(p => `
-                  <button class="live-player-btn" data-pid="${p.id}">
-                    <span class="pnum">${p.number}</span>
-                    <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
-                  </button>`).join('')}
+              <div class="label-row">
+                <label>Spieler</label>
+                ${sortSwitchHTML(getPlayerSort())}
               </div>
+              <div class="live-player-grid" id="lm-players">
+                ${playerButtonsHTML(players, getPlayerSort(), gameId)}
+              </div>
+              ${eingeschraenkt ? `
+              <button type="button" class="squad-toggle" id="lm-show-all">
+                Spieltagskader · alle ${kaderKomplett.length} anzeigen
+              </button>` : ''}
             </div>` : ''}
             ${showZone ? `
             <div class="form-group">
@@ -1098,10 +1289,9 @@ App.views = (function () {
           <div class="form-group">
             <label>Ergebnis</label>
             <div class="outcome-btn-group">
-              <button class="outcome-btn ob-goal"  data-oc="goal">Tor</button>
+              <button class="outcome-btn ob-goal ob-wide"  data-oc="goal">Tor</button>
               <button class="outcome-btn ob-miss"  data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
-              <button class="outcome-btn ob-post"  data-oc="post">Pfosten</button>
             </div>
           </div>` : ''}
           <div class="form-group">
@@ -1122,10 +1312,16 @@ App.views = (function () {
         const courtSvg = App.court.build();
         courtSvg.setAttribute('viewBox', '350 0 450 400'); // crop to attack half
         document.getElementById('lm-court-wrap').appendChild(courtSvg);
+        function markZone(zoneId) {
+          courtSvg.querySelectorAll('.zone-chip').forEach(c =>
+            c.classList.toggle('selected', c.dataset.zone === zoneId));
+        }
+
         App.court.renderZones(courtSvg, 'own', (zoneId, pos) => {
           selectedPosition = zoneId;
           selectedPos = pos;
-          courtSvg.querySelectorAll('.zone-chip').forEach(c => c.classList.toggle('selected', c.dataset.zone === zoneId));
+          zoneVonHand = true;   // ab jetzt nichts mehr automatisch überschreiben
+          markZone(zoneId);
           document.getElementById('lm-below-court')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
@@ -1135,6 +1331,50 @@ App.views = (function () {
           selectedPlayerId = parseInt(btn.dataset.pid);
           document.querySelectorAll('.live-player-btn').forEach(b => b.classList.remove('selected'));
           btn.classList.add('selected');
+
+          // Wurfort aus der Stammposition vorbelegen. Nur solange das Feld
+          // nicht von Hand angetippt wurde — eine bewusste Auswahl darf ein
+          // Spielerwechsel nie stillschweigend überschreiben.
+          if (zoneVonHand) return;
+          const zone = STAMMPOSITION_ZONE[App.data.getPlayer(selectedPlayerId)?.position];
+          if (!zone) { selectedPosition = null; selectedPos = null; markZone(null); return; }
+          selectedPosition = zone;
+          selectedPos = App.court.zoneCenterRel(zone, 'own');
+          markZone(zone);
+        });
+
+        // Umsortieren: Reihenfolge merken und neu zeichnen. Eine bereits
+        // getroffene Auswahl bleibt bestehen — sonst wäre ein Umschalten
+        // mitten im Eintragen ein stiller Datenverlust.
+        document.getElementById('lm-sort')?.addEventListener('click', e => {
+          const btn = e.target.closest('[data-sort]');
+          if (!btn) return;
+          const mode = btn.dataset.sort;
+          setPlayerSort(mode);
+          document.querySelectorAll('.player-sort-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.sort === mode));
+          const grid = document.getElementById('lm-players');
+          grid.innerHTML = playerButtonsHTML(players, mode, gameId);
+          if (selectedPlayerId != null) {
+            grid.querySelector(`[data-pid="${selectedPlayerId}"]`)?.classList.add('selected');
+          }
+        });
+
+        // Kurzzeitig den ganzen Kader zeigen, falls jemand trifft, der nicht
+        // im Spieltagskader steht. Ändert den Spieltagskader NICHT — sonst
+        // würde ein Nachtragen im Spiel unbemerkt die Aufstellung umschreiben.
+        document.getElementById('lm-show-all')?.addEventListener('click', function () {
+          alleZeigen = !alleZeigen;
+          players = alleZeigen ? kaderKomplett : kaderHeute;
+          this.textContent = alleZeigen
+            ? `Ganzer Kader · nur Spieltagskader (${kaderHeute.length}) zeigen`
+            : `Spieltagskader · alle ${kaderKomplett.length} anzeigen`;
+          this.classList.toggle('on', alleZeigen);
+          const grid = document.getElementById('lm-players');
+          grid.innerHTML = playerButtonsHTML(players, getPlayerSort(), gameId);
+          if (selectedPlayerId != null) {
+            grid.querySelector(`[data-pid="${selectedPlayerId}"]`)?.classList.add('selected');
+          }
         });
 
         if (!presetOutcome) {
@@ -1206,10 +1446,9 @@ App.views = (function () {
         <div class="form-group">
           <label>Ergebnis</label>
           <div class="outcome-btn-group">
-            <button class="outcome-btn ob-goal"  data-oc="goal">Tor</button>
+            <button class="outcome-btn ob-goal ob-wide"  data-oc="goal">Tor</button>
             <button class="outcome-btn ob-miss"  data-oc="miss">Fehlschuss</button>
             <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
-            <button class="outcome-btn ob-post"  data-oc="post">Pfosten</button>
           </div>
         </div>` : ''}
         ${showZone ? `

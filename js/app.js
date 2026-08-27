@@ -36,6 +36,56 @@ App.ui = (function () {
   closeBtn.addEventListener('click', closeModal);
   backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
 
+  // ── Rückfrage vor löschenden Aktionen ─────────────────────────────
+  //
+  // Ersetzt das native confirm(). Grund: Browser bieten nach mehreren
+  // Dialogen "Weitere Dialoge dieser Seite verhindern" an, und in der
+  // installierten App werden sie ebenfalls unterdrückt. Danach liefert
+  // confirm() wortlos false — jede Löschen-Aktion tat dann scheinbar
+  // nichts, ohne Dialog und ohne Fehlermeldung.
+  const confirmBackdrop = document.getElementById('confirm-backdrop');
+  const confirmTextEl   = document.getElementById('confirm-text');
+  const confirmOkBtn    = document.getElementById('confirm-ok');
+  const confirmCancel   = document.getElementById('confirm-cancel');
+  let confirmResolve    = null;
+
+  function settleConfirm(answer) {
+    if (!confirmResolve) return;
+    confirmBackdrop.classList.remove('open');
+    document.removeEventListener('keydown', confirmKeydown);
+    const resolve = confirmResolve;
+    confirmResolve = null;
+    resolve(answer);
+  }
+
+  function confirmKeydown(e) {
+    if (e.key === 'Escape') settleConfirm(false);
+    if (e.key === 'Enter')  settleConfirm(true);
+  }
+
+  /**
+   * @param {string} text  Was passiert, wenn bestätigt wird.
+   * @param {string} [okLabel]  Beschriftung des bestätigenden Knopfes.
+   * @returns {Promise<boolean>}
+   */
+  function askConfirm(text, okLabel) {
+    // Eine bereits offene Rückfrage gilt als abgelehnt, damit nie zwei
+    // Zusagen auf dieselbe Aktion warten.
+    settleConfirm(false);
+    confirmTextEl.textContent = text;
+    confirmOkBtn.textContent  = okLabel || 'Löschen';
+    confirmBackdrop.classList.add('open');
+    confirmOkBtn.focus();
+    document.addEventListener('keydown', confirmKeydown);
+    return new Promise(resolve => { confirmResolve = resolve; });
+  }
+
+  confirmOkBtn.addEventListener('click', () => settleConfirm(true));
+  confirmCancel.addEventListener('click', () => settleConfirm(false));
+  confirmBackdrop.addEventListener('click', e => {
+    if (e.target === confirmBackdrop) settleConfirm(false);
+  });
+
   // ── Toast ─────────────────────────────────────────────────────────
   const toastArea = document.getElementById('toast-area');
 
@@ -79,7 +129,6 @@ App.ui = (function () {
           <option value="goal">Tor</option>
           <option value="miss">Fehlschuss</option>
           <option value="block">Geblockt</option>
-          <option value="post">Pfosten</option>
         </select>
       </div>
       <div class="form-group">
@@ -125,7 +174,6 @@ App.ui = (function () {
           <option value="goal">Tor</option>
           <option value="miss">Fehlschuss</option>
           <option value="block">Geblockt</option>
-          <option value="post">Pfosten</option>
         </select>
       </div>
       <div class="form-group">
@@ -193,16 +241,76 @@ App.ui = (function () {
 
     // Render topbar actions per view
     if (viewId === 'squad') {
-      topbarActs.innerHTML = `<button class="btn btn-primary" data-action="add-player">+ Spieler</button>`;
+      topbarActs.innerHTML = `
+        <button class="btn btn-outline" data-action="import-squad-csv">↓ CSV laden</button>
+        <button class="btn btn-outline" data-action="download-squad-template">Vorlage</button>
+        <button class="btn btn-primary" data-action="add-player">+ Spieler</button>
+        <input type="file" id="f-squad-import" accept=".csv,text/csv" style="display:none">
+      `;
+      document.getElementById('f-squad-import')?.addEventListener('change', handleSquadCsvFile);
     } else if (viewId === 'schedule') {
       topbarActs.innerHTML = `
         <button class="btn btn-outline" data-action="import-api">↓ API laden</button>
+        <button class="btn btn-outline" data-action="import-csv">↓ CSV laden</button>
+        <button class="btn btn-outline" data-action="download-csv-template">Vorlage</button>
         <button class="btn btn-primary"  data-action="add-game">+ Spiel</button>
+        <input type="file" id="f-csv-import" accept=".csv,text/csv" style="display:none">
       `;
+      document.getElementById('f-csv-import')?.addEventListener('change', handleCsvFile);
     }
 
     view.render(content);
     window._currentView = viewId;
+  }
+
+  // ── CSV-Import (Spielplan) ──────────────────────────────────────────
+  function handleCsvFile(e) {
+    const input = e.target;
+    const file  = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { games, errors } = App.csv.parseGamesFromCsv(reader.result);
+      const added = App.data.importGames(games);
+      const skipped = games.length - added;
+
+      let msg = `${added} Spiel${added === 1 ? '' : 'e'} importiert`;
+      if (skipped > 0) msg += `, ${skipped} schon vorhanden`;
+      if (errors.length > 0) msg += `, ${errors.length} Zeile${errors.length === 1 ? '' : 'n'} übersprungen`;
+      toast(msg, errors.length > 0 ? 'inf' : 'ok');
+
+      if (errors.length > 0) console.warn('CSV-Import — übersprungene Zeilen:\n' + errors.join('\n'));
+
+      navigate('schedule');
+      input.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  // ── CSV-Import (Kader) ──────────────────────────────────────────────
+  function handleSquadCsvFile(e) {
+    const input = e.target;
+    const file  = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { players, errors } = App.csv.parsePlayersFromCsv(reader.result);
+      const { added, updated } = App.data.importPlayers(players);
+
+      const parts = [];
+      if (added)   parts.push(`${added} Spieler neu`);
+      if (updated) parts.push(`${updated} aktualisiert`);
+      if (errors.length) parts.push(`${errors.length} Zeile${errors.length === 1 ? '' : 'n'} übersprungen`);
+      toast(parts.length ? parts.join(', ') : 'Nichts importiert', errors.length ? 'inf' : 'ok');
+
+      if (errors.length > 0) console.warn('Kader-Import — übersprungene Zeilen:\n' + errors.join('\n'));
+
+      navigate('squad');
+      input.value = '';
+    };
+    reader.readAsText(file);
   }
 
   // ── Event Delegation ─────────────────────────────────────────────
@@ -266,13 +374,19 @@ App.ui = (function () {
         break;
       }
 
-      case 'delete-player':
-        if (!confirm('Spieler wirklich löschen?')) break;
-        App.data.deletePlayer(id);
-        closeModal();
-        toast('Spieler gelöscht', 'ok');
-        navigate('squad');
+      case 'delete-player': {
+        const player = App.data.getPlayer(id);
+        askConfirm(
+          player ? `${player.name} aus dem Kader löschen?` : 'Spieler wirklich löschen?'
+        ).then(ja => {
+          if (!ja) return;
+          App.data.deletePlayer(id);
+          closeModal();
+          toast('Spieler gelöscht', 'ok');
+          navigate('squad');
+        });
         break;
+      }
 
       case 'add-game': {
         const formHtml = App.views.gameFormHTML() + `
@@ -317,10 +431,12 @@ App.ui = (function () {
       }
 
       case 'delete-game':
-        if (!confirm('Spiel und alle zugehörigen Würfe löschen?')) break;
-        App.data.deleteGame(id);
-        toast('Spiel gelöscht', 'ok');
-        navigate('schedule');
+        askConfirm('Spiel und alle zugehörigen Würfe löschen?').then(ja => {
+          if (!ja) return;
+          App.data.deleteGame(id);
+          toast('Spiel gelöscht', 'ok');
+          navigate('schedule');
+        });
         break;
 
       case 'import-api':
@@ -331,6 +447,22 @@ App.ui = (function () {
             navigate('schedule');
           })
           .catch(err => toast(`Fehler: ${err.message}`, 'err'));
+        break;
+
+      case 'import-csv':
+        document.getElementById('f-csv-import')?.click();
+        break;
+
+      case 'download-csv-template':
+        App.csv.downloadTemplate('schedule');
+        break;
+
+      case 'import-squad-csv':
+        document.getElementById('f-squad-import')?.click();
+        break;
+
+      case 'download-squad-template':
+        App.csv.downloadTemplate('squad');
         break;
 
       case 'settings': {
@@ -372,22 +504,24 @@ App.ui = (function () {
           fileInput?.addEventListener('change', () => {
             const file = fileInput.files[0];
             if (!file) return;
-            if (!confirm('Aktuelle Daten werden durch die Sicherung ersetzt. Fortfahren?')) {
-              fileInput.value = '';
-              return;
-            }
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (App.data.importJSON(reader.result)) {
-                closeModal();
-                init();
-                toast('Sicherung wiederhergestellt', 'ok');
-              } else {
-                toast('Ungültige Sicherungsdatei', 'err');
-              }
-              fileInput.value = '';
-            };
-            reader.readAsText(file);
+            askConfirm(
+              'Aktuelle Daten werden durch die Sicherung ersetzt. Fortfahren?',
+              'Ersetzen'
+            ).then(ja => {
+              if (!ja) { fileInput.value = ''; return; }
+              const reader = new FileReader();
+              reader.onload = () => {
+                if (App.data.importJSON(reader.result)) {
+                  closeModal();
+                  init();
+                  toast('Sicherung wiederhergestellt', 'ok');
+                } else {
+                  toast('Ungültige Sicherungsdatei', 'err');
+                }
+                fileInput.value = '';
+              };
+              reader.readAsText(file);
+            });
           });
 
           renderVideoStorage();
@@ -436,10 +570,12 @@ App.ui = (function () {
       const btn = e.target.closest('[data-vs-del]');
       if (!btn) return;
       const gameId = parseInt(btn.dataset.vsDel);
-      if (!confirm('Diese Aufnahme löschen?')) return;
-      App.video.remove(gameId).then(() => {
-        renderVideoStorage();
-        toast('Aufnahme gelöscht', 'ok');
+      askConfirm('Diese Aufnahme löschen?').then(ja => {
+        if (!ja) return;
+        App.video.remove(gameId).then(() => {
+          renderVideoStorage();
+          toast('Aufnahme gelöscht', 'ok');
+        });
       });
     };
   }
@@ -481,7 +617,7 @@ App.ui = (function () {
     navigate('dashboard');
   }
 
-  return { openModal, closeModal, toast, openShotModal, openOpponentShotModal, navigate, init, toggleTheme };
+  return { openModal, closeModal, toast, askConfirm, openShotModal, openOpponentShotModal, navigate, init, toggleTheme };
 })();
 
 App.ui.init();

@@ -1356,7 +1356,12 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
    SVG-Präsentationsattribute haben Spezifität 0 und werden von jeder
    CSS-Regel überschrieben. */
 .modal-matchform .court-svg rect { fill: none !important; stroke: var(--form-rule-strong) !important; }
-.modal-matchform .court-svg path { fill: none !important; stroke: var(--form-ink-dim) !important; }
+/* :not(.zone-chip-bg) ist Pflicht, nicht Kosmetik: die Wurfzonen sind ebenfalls
+   <path>. Mit fill:none wird ihre Flaeche unklickbar (pointer-events reagieren
+   nur auf Gemaltes), es bliebe nur der haarduenne Rand. Der 7m-Punkt ist ein
+   <circle> und war deshalb als einzige Zone weiter treffbar. Gleiche Ausnahme
+   wie in der circle-Regel unten. */
+.modal-matchform .court-svg path:not(.zone-chip-bg) { fill: none !important; stroke: var(--form-ink-dim) !important; }
 .modal-matchform .court-svg line { stroke: var(--form-ink-dim) !important; }
 .modal-matchform .court-svg circle:not(.zone-chip-bg) { fill: var(--form-ink-dim) !important; stroke: none !important; }
 
@@ -1448,4 +1453,142 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 @media (pointer: coarse) {
   .matchform-check-group .outcome-btn { padding: 18px 8px; }
   .modal-matchform .live-player-btn { min-height: 52px; }
+}
+
+/* ── Rückfrage vor löschenden Aktionen ──────────────────────────────
+   Liegt über dem normalen Modal, damit die Rückfrage aus einem
+   geöffneten Formular heraus (z.B. "Spieler bearbeiten") funktioniert,
+   ohne dieses zu überschreiben. */
+.confirm-backdrop { z-index: 1100; }
+.confirm-box { max-width: 400px; }
+.confirm-box .modal-body { padding: 22px; }
+.confirm-text {
+  margin: 0 0 4px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.confirm-box .form-actions { margin-top: 18px; }
+
+/* ── Tor-Knopf über beide Spalten ───────────────────────────────────
+   "Pfosten" ist als Eingabe entfallen; Tor ist der mit Abstand
+   häufigste Eintrag und bekommt dafür die volle Breite. */
+.outcome-btn.ob-wide { grid-column: 1 / -1; }
+
+/* ── Sortierung der Spielerknöpfe ───────────────────────────────── */
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.label-row label { margin-bottom: 0; }
+.player-sort { display: flex; gap: 2px; }
+.player-sort-btn {
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.12s;
+}
+.player-sort-btn:hover { color: var(--text-1); background: var(--surface-3); }
+.player-sort-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.modal-matchform .player-sort-btn {
+  background: none;
+  border-color: var(--form-rule);
+  color: var(--form-ink-dim);
+}
+.modal-matchform .player-sort-btn.active {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
+}
+@media (pointer: coarse) {
+  .player-sort-btn { padding: 7px 12px; font-size: 11.5px; }
+}
+
+/* ── Spieltagskader ─────────────────────────────────────────────────
+   Auswahl, wer an diesem Spiel teilnimmt. */
+.squad-pick-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.squad-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.squad-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.squad-pick {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  grid-template-areas: "num name" "num pos";
+  align-items: center;
+  gap: 0 8px;
+  padding: 7px 9px;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.squad-pick .sp-num  { grid-area: num; font-size: 16px; font-weight: 900; text-align: center; }
+.squad-pick .sp-name { grid-area: name; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.squad-pick .sp-pos  { grid-area: pos; font-size: 10px; color: var(--text-3); }
+.squad-pick:hover { border-color: var(--border-2); }
+/* Dabei/nicht dabei unterscheidet sich nicht nur in der Farbe, sondern
+   auch in Helligkeit und Randstärke — bei Rot-Grün-Schwäche sonst gleich. */
+.squad-pick.on {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--text-1);
+}
+.squad-pick.on .sp-num { color: var(--green); }
+.squad-pick.on .sp-pos { color: var(--text-2); }
+
+.squad-toggle {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  padding: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-2);
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.squad-toggle:hover { color: var(--text-1); border-color: var(--text-3); }
+.squad-toggle.on { border-style: solid; border-color: var(--accent); color: var(--accent); }
+.modal-matchform .squad-toggle { border-color: var(--form-rule); color: var(--form-ink-dim); }
+.modal-matchform .squad-toggle.on { border-color: var(--green); color: var(--green); }
+
+.matchform-gamebar #btn-matchday-squad { margin-left: 8px; flex-shrink: 0; }
+@media (pointer: coarse) {
+  .squad-pick { padding: 11px 10px; }
+  .squad-toggle { padding: 10px; font-size: 12px; }
 }

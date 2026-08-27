@@ -117,6 +117,21 @@ finish review, the verdict, and DESIGN.md
   </div>
 </div>
 
+<!-- Rückfrage vor löschenden Aktionen. Bewusst NICHT das native confirm():
+     das schaltet der Browser nach mehreren Dialogen stillschweigend ab
+     (und in der installierten App ebenso), wodurch Löschen wortlos nichts tat. -->
+<div class="modal-backdrop confirm-backdrop" id="confirm-backdrop">
+  <div class="modal-box confirm-box">
+    <div class="modal-body">
+      <p class="confirm-text" id="confirm-text"></p>
+      <div class="form-actions">
+        <button class="btn btn-outline" id="confirm-cancel" type="button">Abbrechen</button>
+        <button class="btn btn-danger" id="confirm-ok" type="button">Löschen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toasts -->
 <div class="toast-area" id="toast-area"></div>
 
@@ -124,6 +139,7 @@ finish review, the verdict, and DESIGN.md
 <script src="js/data.js"></script>
 <script src="js/court.js"></script>
 <script src="js/api.js"></script>
+<script src="js/csv.js"></script>
 <script src="js/video.js"></script>
 <script src="js/views.js"></script>
 <script src="js/app.js"></script>
