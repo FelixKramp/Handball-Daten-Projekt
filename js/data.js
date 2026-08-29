@@ -160,11 +160,13 @@ App.data = (function () {
       return added;
     },
 
-    // ── Spieltagskader ────────────────────────────────────
+    // ── Spieltagskader und Start 7 ────────────────────────
     //
-    // Pro Spiel eine Liste von Spieler-IDs. Fehlt sie (Altdaten oder noch
-    // nicht gesetzt), gilt der komplette Kader — dadurch aendert sich fuer
-    // bestehende Spiele nichts.
+    // Pro Spiel zwei Listen von Spieler-IDs auf dem Spiel-Objekt:
+    //   squad    — wer heute ueberhaupt dabei ist
+    //   starters — die Anfangsformation
+    // Fehlt eine (Altdaten oder noch nicht gesetzt), gilt der komplette
+    // Kader bzw. keine Start 7 — bestehende Spiele aendern sich dadurch nicht.
 
     /** Spieler, die an diesem Spiel teilnehmen. Ohne gesetzten Kader: alle. */
     getMatchdaySquad(gameId) {
@@ -190,23 +192,58 @@ App.data = (function () {
       return game.squad;
     },
 
-    /**
-     * Vorschlag beim ersten Oeffnen: der Kader des zuletzt gespielten
-     * Spiels davor. So hakt man nur die Ausfaelle ab, statt jedes Mal
-     * von vorn auszuwaehlen. Gibt es keinen, zaehlt der ganze Kader.
-     */
-    suggestMatchdaySquad(gameId) {
+    /** Anfangsformation. Ohne gesetzte Start 7 eine leere Liste. */
+    getStarters(gameId) {
       const game = state.games.find(g => g.id === gameId);
-      if (!game) return state.players.map(p => p.id);
+      if (!game || !Array.isArray(game.starters)) return [];
+      // Gleiche Filterrichtung wie beim Kader: geloeschte Spieler fallen raus.
+      return state.players.filter(p => game.starters.includes(p.id));
+    },
+
+    hasStarters(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      return Boolean(game && Array.isArray(game.starters) && game.starters.length > 0);
+    },
+
+    setStarters(gameId, playerIds) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return null;
+      game.starters = [...playerIds];
+      persist(state);
+      return game.starters;
+    },
+
+    /**
+     * Vorschlag beim ersten Oeffnen: die Liste des zuletzt gespielten Spiels
+     * DAVOR. So hakt man nur die Aenderungen ab, statt jedes Mal von vorn
+     * auszuwaehlen. Bewusst nur rueckwaerts: zoege ein frueheres Spiel seine
+     * Aufstellung aus einem spaeteren, waere die Rueckschau falsch.
+     *
+     * @param {'squad'|'starters'} feld
+     * @param {number[]} fallback  Ergebnis, wenn es kein frueheres Spiel gibt.
+     */
+    suggestFromPreviousGame(gameId, feld, fallback) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return fallback;
 
       const frueher = state.games
-        .filter(g => g.id !== gameId && Array.isArray(g.squad) && g.date && g.date <= game.date)
+        .filter(g => g.id !== gameId && Array.isArray(g[feld]) && g.date && g.date <= game.date)
         .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
-      if (!frueher) return state.players.map(p => p.id);
+      if (!frueher) return fallback;
       // Nur noch existierende Spieler uebernehmen.
       const vorhanden = new Set(state.players.map(p => p.id));
-      return frueher.squad.filter(id => vorhanden.has(id));
+      return frueher[feld].filter(id => vorhanden.has(id));
+    },
+
+    /** Ohne frueheres Spiel zaehlt der ganze Kader. */
+    suggestMatchdaySquad(gameId) {
+      return this.suggestFromPreviousGame(gameId, 'squad', state.players.map(p => p.id));
+    },
+
+    /** Ohne frueheres Spiel bleibt die Start 7 leer — raten waere hier falsch. */
+    suggestStarters(gameId) {
+      return this.suggestFromPreviousGame(gameId, 'starters', []);
     },
 
     // ── Shots ─────────────────────────────────────────────

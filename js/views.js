@@ -755,6 +755,7 @@ App.views = (function () {
             ${games.map(g => `<option value="${g.id}" ${g.id === defaultGame.id ? 'selected' : ''}>${dateFmt(g.date)} – ${g.opponent}${g.played ? ' ✓' : ''}</option>`).join('')}
           </select>
           <button class="btn btn-outline btn-sm" id="btn-matchday-squad" type="button">Spieltagskader</button>
+          <button class="btn btn-outline btn-sm" id="btn-starters" type="button">Start 7</button>
         </div>
 
         <div class="live-header matchform-scoreboard">
@@ -1064,19 +1065,31 @@ App.views = (function () {
     });
 
     // ── Spieltagskader ─────────────────────────────────────────────
-    function refreshSquadButton() {
-      const btn = document.getElementById('btn-matchday-squad');
+    function markiere(btn, gesetzt, text) {
       if (!btn) return;
-      const gesetzt = App.data.hasMatchdaySquad(currentGameId);
-      const anzahl  = App.data.getMatchdaySquad(currentGameId).length;
-      btn.textContent = gesetzt ? `Spieltagskader (${anzahl})` : 'Spieltagskader';
+      btn.textContent = text;
       btn.classList.toggle('btn-primary', gesetzt);
       btn.classList.toggle('btn-outline', !gesetzt);
+    }
+
+    function refreshSquadButton() {
+      const gesetzt = App.data.hasMatchdaySquad(currentGameId);
+      const anzahl  = App.data.getMatchdaySquad(currentGameId).length;
+      markiere(document.getElementById('btn-matchday-squad'), gesetzt,
+               gesetzt ? `Spieltagskader (${anzahl})` : 'Spieltagskader');
+
+      const starter = App.data.getStarters(currentGameId).length;
+      markiere(document.getElementById('btn-starters'), starter > 0,
+               starter > 0 ? `Start 7 (${starter})` : 'Start 7');
     }
     refreshSquadButton();
 
     document.getElementById('btn-matchday-squad')?.addEventListener('click', () => {
       openMatchdaySquadModal(currentGameId, refreshSquadButton);
+    });
+
+    document.getElementById('btn-starters')?.addEventListener('click', () => {
+      openStartersModal(currentGameId, refreshSquadButton);
     });
 
     // ── Attack modal ───────────────────────────────────────────────
@@ -1127,12 +1140,40 @@ App.views = (function () {
       return list.sort(byNumber);
     }
 
-    function playerButtonsHTML(players, mode, gameId) {
-      return sortPlayers(players, mode, gameId).map(p => `
+    function playerButtonHTML(p) {
+      return `
         <button class="live-player-btn" data-pid="${p.id}">
           <span class="pnum">${p.number}</span>
           <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
-        </button>`).join('');
+        </button>`;
+    }
+
+    /** Trennzeile über die volle Rasterbreite. Bewusst ohne data-pid — sonst
+     *  zählte sie beim Wiederherstellen der Auswahl als Spielerknopf. */
+    function groupRowHTML(label) {
+      return `<div class="player-group-row">${label}</div>`;
+    }
+
+    /**
+     * Ist eine Start 7 gesetzt, stehen ihre Spieler oben und sind als Gruppe
+     * abgesetzt; innerhalb beider Gruppen greift die gewählte Sortierung.
+     * Eine Regel für alle Sortiermodi — dadurch vorhersagbar.
+     */
+    function playerButtonsHTML(players, mode, gameId) {
+      const starterIds = new Set(App.data.getStarters(gameId).map(p => p.id));
+      const sortiert = sortPlayers(players, mode, gameId);
+
+      const starter = sortiert.filter(p => starterIds.has(p.id));
+      const bank    = sortiert.filter(p => !starterIds.has(p.id));
+
+      // Ohne Start 7 — oder wenn ohnehin alle Angezeigten Starter sind —
+      // bleibt es eine flache Liste ohne Trennzeilen.
+      if (starter.length === 0 || bank.length === 0) {
+        return sortiert.map(playerButtonHTML).join('');
+      }
+
+      return groupRowHTML('Start 7') + starter.map(playerButtonHTML).join('')
+           + groupRowHTML('Bank')    + bank.map(playerButtonHTML).join('');
     }
 
     const SORT_LABELS = { number: 'Nummer', position: 'Position', goals: 'Tore' };
@@ -1166,34 +1207,34 @@ App.views = (function () {
     }
 
     /**
-     * Auswahl, wer heute mitspielt. Beim ersten Öffnen ist der Kader des
-     * letzten Spiels vorgeschlagen — man hakt nur die Ausfälle ab.
+     * Spielerauswahl per Antippen — Grundlage für Spieltagskader und Start 7.
+     * Beide Fenster sind bis auf Titel, Ausgangsmenge und Obergrenze gleich;
+     * getrennt gepflegt würden sie mit der Zeit auseinanderlaufen.
+     *
+     * @param {object}   o
+     * @param {string}   o.titel
+     * @param {string}   o.hinweis    Erklärender Satz über der Liste.
+     * @param {object[]} o.auswahl    Spieler, die zur Wahl stehen.
+     * @param {number[]} o.start      Anfangs angehakte IDs.
+     * @param {number}   [o.max]      Obergrenze; ohne Angabe unbegrenzt.
+     * @param {function} o.onSpeichern  Bekommt die gewählten IDs.
      */
-    function openMatchdaySquadModal(gameId, onSave) {
-      const alle = App.data.getPlayers();
-      if (alle.length === 0) {
-        App.ui.toast('Lege zuerst einen Kader an', 'inf');
-        return;
-      }
+    function openPlayerPicker(o) {
+      const dabei = new Set(o.start);
+      const gesamt = o.max || o.auswahl.length;
 
-      const start = App.data.hasMatchdaySquad(gameId)
-        ? App.data.getMatchdaySquad(gameId).map(p => p.id)
-        : App.data.suggestMatchdaySquad(gameId);
-      const dabei = new Set(start);
-
-      const liste = sortPlayers(alle, 'position', gameId).map(p => `
+      const liste = o.auswahl.map(p => `
         <button type="button" class="squad-pick${dabei.has(p.id) ? ' on' : ''}" data-pid="${p.id}">
           <span class="sp-num">${p.number || '–'}</span>
           <span class="sp-name">${p.name}</span>
           <span class="sp-pos">${POS_LABELS[p.position] || ''}</span>
         </button>`).join('');
 
-      App.ui.openModal('Spieltagskader', `
-        <p class="text-muted" style="font-size:12.5px;margin:-4px 0 12px">
-          Nur diese Spieler stehen beim Eintragen zur Auswahl. Gilt für dieses Spiel.
-        </p>
+      App.ui.openModal(o.titel, `
+        <p class="text-muted" style="font-size:12.5px;margin:-4px 0 12px">${o.hinweis}</p>
         <div class="squad-pick-actions">
-          <button class="btn btn-ghost btn-sm" id="sq-all" type="button">Alle</button>
+          ${o.max ? '' : `
+          <button class="btn btn-ghost btn-sm" id="sq-all" type="button">Alle</button>`}
           <button class="btn btn-ghost btn-sm" id="sq-none" type="button">Keinen</button>
           <span class="squad-count" id="sq-count"></span>
         </div>
@@ -1206,35 +1247,97 @@ App.views = (function () {
       setTimeout(() => {
         const grid  = document.getElementById('sq-grid');
         const count = document.getElementById('sq-count');
-        const zeige = () => { count.textContent = `${dabei.size} von ${alle.length}`; };
+        const zeige = () => { count.textContent = `${dabei.size} von ${gesamt}`; };
         zeige();
 
         grid.addEventListener('click', e => {
           const btn = e.target.closest('[data-pid]');
           if (!btn) return;
           const id = parseInt(btn.dataset.pid);
-          if (dabei.has(id)) dabei.delete(id); else dabei.add(id);
+          if (dabei.has(id)) {
+            dabei.delete(id);
+          } else {
+            // Bei voller Auswahl lieber ablehnen und sagen warum, als still
+            // jemanden herauszuwerfen — sonst verschwindet unbemerkt einer.
+            if (o.max && dabei.size >= o.max) {
+              App.ui.toast(`${o.titel} ist voll — nimm erst jemanden heraus`, 'inf');
+              return;
+            }
+            dabei.add(id);
+          }
           btn.classList.toggle('on', dabei.has(id));
           zeige();
         });
 
         const setzeAlle = an => {
           dabei.clear();
-          if (an) alle.forEach(p => dabei.add(p.id));
+          if (an) o.auswahl.forEach(p => dabei.add(p.id));
           grid.querySelectorAll('[data-pid]').forEach(b =>
             b.classList.toggle('on', dabei.has(parseInt(b.dataset.pid))));
           zeige();
         };
-        document.getElementById('sq-all').addEventListener('click', () => setzeAlle(true));
+        document.getElementById('sq-all')?.addEventListener('click', () => setzeAlle(true));
         document.getElementById('sq-none').addEventListener('click', () => setzeAlle(false));
 
         document.getElementById('sq-save').addEventListener('click', () => {
-          App.data.setMatchdaySquad(gameId, [...dabei]);
+          o.onSpeichern([...dabei]);
           App.ui.closeModal();
-          App.ui.toast(`Spieltagskader: ${dabei.size} Spieler`, 'ok');
-          if (onSave) onSave();
         });
       }, 0);
+    }
+
+    /**
+     * Auswahl, wer heute mitspielt. Beim ersten Öffnen ist der Kader des
+     * letzten Spiels vorgeschlagen — man hakt nur die Ausfälle ab.
+     */
+    function openMatchdaySquadModal(gameId, onSave) {
+      const alle = App.data.getPlayers();
+      if (alle.length === 0) {
+        App.ui.toast('Lege zuerst einen Kader an', 'inf');
+        return;
+      }
+
+      openPlayerPicker({
+        titel: 'Spieltagskader',
+        hinweis: 'Nur diese Spieler stehen beim Eintragen zur Auswahl. Gilt für dieses Spiel.',
+        auswahl: sortPlayers(alle, 'position', gameId),
+        start: App.data.hasMatchdaySquad(gameId)
+          ? App.data.getMatchdaySquad(gameId).map(p => p.id)
+          : App.data.suggestMatchdaySquad(gameId),
+        onSpeichern: ids => {
+          App.data.setMatchdaySquad(gameId, ids);
+          // Wer nicht mehr im Kader ist, kann auch nicht in der Start 7 stehen.
+          const drin = new Set(ids);
+          const starter = App.data.getStarters(gameId).map(p => p.id).filter(id => drin.has(id));
+          if (App.data.hasStarters(gameId)) App.data.setStarters(gameId, starter);
+          App.ui.toast(`Spieltagskader: ${ids.length} Spieler`, 'ok');
+          if (onSave) onSave();
+        },
+      });
+    }
+
+    /** Anfangsformation. Bestimmt nur die Reihenfolge, filtert nichts weg. */
+    function openStartersModal(gameId, onSave) {
+      const kader = App.data.getMatchdaySquad(gameId);
+      if (kader.length === 0) {
+        App.ui.toast('Lege zuerst einen Kader an', 'inf');
+        return;
+      }
+
+      openPlayerPicker({
+        titel: 'Start 7',
+        hinweis: 'Diese sieben stehen beim Eintragen oben. Wechsel musst du nicht mitschreiben — alle anderen bleiben darunter erreichbar.',
+        auswahl: sortPlayers(kader, 'position', gameId),
+        start: App.data.hasStarters(gameId)
+          ? App.data.getStarters(gameId).map(p => p.id)
+          : App.data.suggestStarters(gameId),
+        max: 7,
+        onSpeichern: ids => {
+          App.data.setStarters(gameId, ids);
+          App.ui.toast(ids.length ? `Start 7: ${ids.length} Spieler` : 'Start 7 zurückgesetzt', 'ok');
+          if (onSave) onSave();
+        },
+      });
     }
 
     function openAttackModal(gameId, autoMinute, presetOutcome) {
@@ -1264,7 +1367,7 @@ App.views = (function () {
         <div id="lm-below-court">
           <div class="lm-2col">
             ${players.length > 0 ? `
-            <div class="form-group">
+            <div class="lm-field">
               <div class="label-row">
                 <label>Spieler</label>
                 ${sortSwitchHTML(getPlayerSort())}
@@ -1278,8 +1381,8 @@ App.views = (function () {
               </button>` : ''}
             </div>` : ''}
             ${showZone ? `
-            <div class="form-group">
-              <label>Torzone (wohin geworfen, aus eigener Sicht)</label>
+            <div class="lm-field">
+              <label>Torzone <span class="lm-field-hint">wohin geworfen, aus eigener Sicht</span></label>
               <div class="goal-zone-grid">
                 ${GOAL_TARGET_ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
               </div>
