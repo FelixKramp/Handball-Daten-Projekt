@@ -374,8 +374,9 @@ App.views = (function () {
 
             ${weichtAb ? `
             <div class="gs-hint">
-              Gespeicherter Endstand ${game.goalsFor}:${game.goalsAgainst}, erfasst sind ${erfasst} eigene Tore.
-              Im Spielmodus mit „Ergebnis aktualisieren" angleichen.
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8 15 14H1z"/><path d="M8 6.4v3.2M8 11.6h.01"/></svg>
+              <span>Gespeicherter Endstand ${game.goalsFor}:${game.goalsAgainst}, erfasst sind ${erfasst} eigene Tore.
+              Im Spielmodus mit „Ergebnis aktualisieren" angleichen.</span>
             </div>` : ''}
 
             <div class="gs-kpis">

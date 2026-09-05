@@ -1683,14 +1683,26 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
   color: var(--text-2);
   margin-top: 5px;
 }
+/* Bedeutung ueber ein gezeichnetes Icon, nicht ueber eine Randfarbe —
+   dasselbe Muster wie bei den Toasts (siehe TOAST_ICON in app.js). */
 .gs-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
   margin-top: 12px;
-  padding: 8px 11px;
-  border-left: 3px solid var(--yellow);
-  background: var(--yellow-dim);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
   font-size: 12.5px;
   color: var(--text-1);
+}
+.gs-hint svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--yellow);
 }
 .gs-kpis {
   display: grid;
