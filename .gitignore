@@ -1,2 +1,8 @@
 .claude/
 .DS_Store
+
+# Personenbezogene Daten gehoeren nicht in ein oeffentliches Repository.
+# Kaderlisten und Sicherungen bleiben lokal auf dem Geraet.
+data/
+*sicherung*.json
+kader*.csv
