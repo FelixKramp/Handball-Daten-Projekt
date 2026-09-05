@@ -2076,13 +2076,31 @@ App.views = (function () {
           }
         });
 
-        document.getElementById('btn-add-confirm')?.addEventListener('click', () => {
-          const name = document.getElementById('opp-new-player')?.value.trim();
+        /**
+         * Neu angelegten Gegenspieler sofort auswaehlen.
+         *
+         * Vorher blieb er unmarkiert: wer im Spiel die Nummer eintippt, hat
+         * den Werfer gerade im Kopf und haelt ihn damit fuer gesetzt — der
+         * Wurf wurde dann ohne Spieler gespeichert, und gemerkt hat man es
+         * erst in der Auswertung.
+         */
+        function neuenSpielerUebernehmen() {
+          const feld = document.getElementById('opp-new-player');
+          const name = App.data.addOpponentPlayer(gameId, feld?.value);
           if (!name) return;
-          App.data.addOpponentPlayer(gameId, name);
-          document.getElementById('opp-new-player').value = '';
+          selectedOppPlayer = name;
+          feld.value = '';
           document.getElementById('opp-add-row').style.display = 'none';
           buildRosterChips();
+        }
+
+        document.getElementById('btn-add-confirm')?.addEventListener('click', neuenSpielerUebernehmen);
+
+        // Auf dem iPad liegt die Eingabetaste naeher als der OK-Knopf.
+        document.getElementById('opp-new-player')?.addEventListener('keydown', e => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          neuenSpielerUebernehmen();
         });
 
         if (!presetOutcome) {

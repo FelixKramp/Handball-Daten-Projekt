@@ -514,12 +514,26 @@ App.data = (function () {
       const g = state.games.find(g => g.id === gameId);
       return g ? (g.opponentRoster || []) : [];
     },
+    /**
+     * Gegenspieler anlegen. Gibt den Namen zurueck, damit der Aufrufer ihn
+     * gleich auswaehlen kann.
+     *
+     * Doppelte werden nicht angelegt: die Auswahl im Formular laeuft ueber
+     * den Namen, zwei Eintraege "7" waeren beide markiert und man saehe nicht
+     * mehr, welcher gemeint ist.
+     */
     addOpponentPlayer(gameId, name) {
+      const sauber = String(name || '').trim();
+      if (!sauber) return null;
       const i = state.games.findIndex(g => g.id === gameId);
-      if (i < 0) return;
+      if (i < 0) return null;
       if (!state.games[i].opponentRoster) state.games[i].opponentRoster = [];
-      state.games[i].opponentRoster.push(name.trim());
+      const vorhanden = state.games[i].opponentRoster
+        .find(n => n.toLowerCase() === sauber.toLowerCase());
+      if (vorhanden) return vorhanden;
+      state.games[i].opponentRoster.push(sauber);
       persist(state);
+      return sauber;
     },
     removeOpponentPlayer(gameId, idx) {
       const i = state.games.findIndex(g => g.id === gameId);
