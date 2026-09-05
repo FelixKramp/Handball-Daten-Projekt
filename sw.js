@@ -8,7 +8,7 @@
  * sonst bekommen installierte Geräte die alte Fassung weiter ausgeliefert.
  */
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `hb-app-${CACHE_VERSION}`;
 
 // Relative Pfade, damit es unter GitHub Pages im Unterordner genauso läuft wie lokal.

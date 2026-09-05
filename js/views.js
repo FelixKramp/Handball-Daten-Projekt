@@ -553,16 +553,20 @@ App.views = (function () {
           </div>
         </div>
         <div class="section" style="margin-top:24px;">
-          <div class="grid-3">
-            <div class="card">
+          <div class="analyse-grid">
+            <div class="card card-sm analyse-schmal">
               <div class="card-title">Wurfstatistik${isOwn ? '' : ' (Gegner)'}</div>
               <div id="shot-stats-content"></div>
             </div>
-            <div class="card">
+            <div class="card card-sm analyse-schmal">
               <div class="card-title">Torzonen — wo wir ${isOwn ? 'treffen' : 'kassieren'}</div>
-              <div id="${isOwn ? 'own-goalzone-panel' : 'secondary-panel'}"></div>
+              <div id="goalzone-panel"></div>
             </div>
-            <div class="card">
+            <div class="card analyse-halb">
+              <div class="card-title">Wurfpositionen <span class="card-title-hint">von wo wir ${isOwn ? 'treffen' : 'kassieren'}</span></div>
+              <div id="position-stats-panel"></div>
+            </div>
+            <div class="card analyse-voll">
               <div class="card-title">${isOwn ? 'Spieler' : 'Gegner-Werfer'} <span class="card-title-hint">antippen für Wurfkarte</span></div>
               <div id="shooter-list-panel"></div>
             </div>
@@ -602,9 +606,9 @@ App.views = (function () {
           App.court.renderOpponentShots(courtSvg, App.data.getOpponentShots(activeGameId, half));
         }
         renderStats();
-        renderSecondary();
+        renderGoalZone();
+        renderPositionStats();
         renderShooterList();
-        if (isOwn) renderOwnGoalZone();
         if (entryOn) App.court.renderZones(courtSvg, isOwn ? 'own' : 'opp', pickZone);
       }
 
@@ -617,12 +621,12 @@ App.views = (function () {
         const s = isOwn ? App.data.getShotStats(activeGameId, half) : App.data.getOpponentShotStats(activeGameId, half);
         const pct = s.total > 0 ? Math.round(s.goals / s.total * 100) : 0;
         document.getElementById('shot-stats-content').innerHTML = `
-          <div class="stat-row" style="margin-bottom:16px;">
-            <div class="stat-col"><span class="v">${s.total}</span><span class="l">Würfe</span></div>
-            <div class="stat-col"><span class="v ${isOwn ? 'text-green' : 'text-red'}">${s.goals}</span><span class="l">Tore</span></div>
-            <div class="stat-col"><span class="v">${pct}%</span><span class="l">Quote</span></div>
+          <div class="stat-row" style="margin-bottom:14px;">
+            <div class="stat-col"><span class="val">${s.total}</span><span class="lbl">Würfe</span></div>
+            <div class="stat-col"><span class="val ${isOwn ? 'text-green' : 'text-red'}">${s.goals}</span><span class="lbl">${isOwn ? 'Tore' : 'Gegentore'}</span></div>
+            <div class="stat-col"><span class="val">${pct}%</span><span class="lbl">Quote</span></div>
           </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <span class="badge" style="background:rgba(232,72,85,0.15);color:#e84855;">${s.misses} Fehlschüsse</span>
             <span class="badge" style="background:rgba(240,165,0,0.15);color:#f0a500;">${s.blocks} Geblockt</span>
             <span class="badge" style="background:rgba(74,144,217,0.15);color:#4a90d9;">${s.posts} Pfosten</span>
@@ -630,18 +634,80 @@ App.views = (function () {
         `;
       }
 
-      function renderSecondary() {
-        // Nur im Gegner-Reiter: Torwart-Heatmap, wo wir kassieren.
-        const host = document.getElementById('secondary-panel');
+      /**
+       * Torzonen-Raster. Frueher lag das in zwei fast gleichen Funktionen mit
+       * verschiedenen Panel-IDs — dadurch sahen eigene Wuerfe und Gegnerwuerfe
+       * unterschiedlich aus, obwohl beide dasselbe zeigen.
+       */
+      function renderGoalZone() {
+        const host = document.getElementById('goalzone-panel');
         if (!host) return;
-        const gz = App.data.getGoalZoneStats(activeGameId, 'opp', half);
-        host.className = '';
+        const gz = App.data.getGoalZoneStats(activeGameId, isOwn ? 'own' : 'opp', half);
+
         if (gz.total === 0) {
-          host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine Gegner-Tore mit Torzone erfasst.<br>Trage Gegner-Würfe mit Torzone ein (Spielmodus → Abwehr).</div>';
-        } else {
-          host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm" style="text-align:center;margin-top:8px">Aus Sicht des Torwarts · Zahl = kassierte Tore</div>';
-          host.querySelector('.goalzone-host').appendChild(App.court.buildGoalZoneGrid(gz));
+          host.innerHTML = `<div class="text-muted analyse-leer">
+            Noch keine ${isOwn ? 'eigenen Tore' : 'Gegner-Tore'} mit Torzone erfasst.<br>
+            ${isOwn ? 'Trage Würfe im Spielmodus mit Torzone ein.'
+                    : 'Trage Gegner-Würfe mit Torzone ein (Spielmodus → Abwehr).'}</div>`;
+          return;
         }
+
+        host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm analyse-fuss"></div>';
+        host.querySelector('.goalzone-host')
+            .appendChild(App.court.buildGoalZoneGrid(gz, isOwn ? '63,185,104' : undefined));
+        host.querySelector('.analyse-fuss').textContent = isOwn
+          ? 'Aus eigener Sicht · Zahl = erzielte Tore'
+          : 'Aus Sicht des Torwarts · Zahl = kassierte Tore';
+      }
+
+      /**
+       * Trefferquote je Feldposition — die genaue Zahl zur Wurfkarte. Aus den
+       * Punkten auf dem Feld laesst sich "3 von 5 vom Kreis" nicht ablesen,
+       * und beim Gegner ist genau das die Frage: wo macht die Abwehr auf?
+       */
+      function renderPositionStats() {
+        const host = document.getElementById('position-stats-panel');
+        if (!host) return;
+        const zeilen = App.data.getPositionStats(activeGameId, isOwn ? 'own' : 'opp', half);
+
+        if (zeilen.length === 0) {
+          host.innerHTML = `<div class="text-muted analyse-leer">
+            Noch keine ${isOwn ? 'Würfe' : 'Gegner-Würfe'} erfasst</div>`;
+          return;
+        }
+
+        const name = z => z.position === 'ohne'
+          ? 'Ohne Position'
+          : (App.court.ZONE_LABELS[z.position] || z.position);
+
+        // Die Tabelle ist nach Toren sortiert, die Spitze steht also oben.
+        // Trotzdem einmal ausgeschrieben: das ist die Frage, die man stellt.
+        const spitze = zeilen[0];
+        const kopf = spitze.goals > 0
+          ? `<div class="analyse-kopf">${isOwn ? 'Stärkste Position' : 'Meiste Gegentore'}:
+               <strong>${name(spitze)}</strong> — ${spitze.goals} aus ${spitze.shots} Würfen.</div>`
+          : '';
+
+        host.innerHTML = `
+          ${kopf}
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Position</th>
+                <th class="num">${isOwn ? 'Tore' : 'Gegentore'}</th>
+                <th class="num">Würfe</th>
+                <th class="num">Quote</th>
+              </tr></thead>
+              <tbody>${zeilen.map(z => `
+                <tr>
+                  <td>${name(z)}</td>
+                  <td class="num"><strong>${z.goals}</strong></td>
+                  <td class="num">${z.shots}</td>
+                  <td class="num">${z.pct}%</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
       }
 
       /**
@@ -700,18 +766,6 @@ App.views = (function () {
             pct: e.wuerfe > 0 ? Math.round(e.tore / e.wuerfe * 100) : 0,
           }))
           .sort((a, b) => b.tore - a.tore || b.pct - a.pct);
-      }
-
-      function renderOwnGoalZone() {
-        const host = document.getElementById('own-goalzone-panel');
-        if (!host) return;
-        const gz = App.data.getGoalZoneStats(activeGameId, 'own', half);
-        if (gz.total === 0) {
-          host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine eigenen Tore mit Torzone erfasst.<br>Trage Würfe im Spielmodus mit Torzone ein.</div>';
-        } else {
-          host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm" style="text-align:center;margin-top:8px">Aus eigener Sicht · Zahl = erzielte Tore</div>';
-          host.querySelector('.goalzone-host').appendChild(App.court.buildGoalZoneGrid(gz, '63,185,104'));
-        }
       }
 
       refresh();
