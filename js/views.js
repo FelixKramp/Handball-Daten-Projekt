@@ -553,16 +553,20 @@ App.views = (function () {
           </div>
         </div>
         <div class="section" style="margin-top:24px;">
-          <div class="grid-3">
-            <div class="card">
+          <div class="analyse-grid">
+            <div class="card card-sm analyse-schmal">
               <div class="card-title">Wurfstatistik${isOwn ? '' : ' (Gegner)'}</div>
               <div id="shot-stats-content"></div>
             </div>
-            <div class="card">
+            <div class="card card-sm analyse-schmal">
               <div class="card-title">Torzonen — wo wir ${isOwn ? 'treffen' : 'kassieren'}</div>
-              <div id="${isOwn ? 'own-goalzone-panel' : 'secondary-panel'}"></div>
+              <div id="goalzone-panel"></div>
             </div>
-            <div class="card">
+            <div class="card analyse-halb">
+              <div class="card-title">Wurfpositionen <span class="card-title-hint">von wo wir ${isOwn ? 'treffen' : 'kassieren'}</span></div>
+              <div id="position-stats-panel"></div>
+            </div>
+            <div class="card analyse-voll">
               <div class="card-title">${isOwn ? 'Spieler' : 'Gegner-Werfer'} <span class="card-title-hint">antippen für Wurfkarte</span></div>
               <div id="shooter-list-panel"></div>
             </div>
@@ -602,9 +606,9 @@ App.views = (function () {
           App.court.renderOpponentShots(courtSvg, App.data.getOpponentShots(activeGameId, half));
         }
         renderStats();
-        renderSecondary();
+        renderGoalZone();
+        renderPositionStats();
         renderShooterList();
-        if (isOwn) renderOwnGoalZone();
         if (entryOn) App.court.renderZones(courtSvg, isOwn ? 'own' : 'opp', pickZone);
       }
 
@@ -617,31 +621,104 @@ App.views = (function () {
         const s = isOwn ? App.data.getShotStats(activeGameId, half) : App.data.getOpponentShotStats(activeGameId, half);
         const pct = s.total > 0 ? Math.round(s.goals / s.total * 100) : 0;
         document.getElementById('shot-stats-content').innerHTML = `
-          <div class="stat-row" style="margin-bottom:16px;">
-            <div class="stat-col"><span class="v">${s.total}</span><span class="l">Würfe</span></div>
-            <div class="stat-col"><span class="v ${isOwn ? 'text-green' : 'text-red'}">${s.goals}</span><span class="l">Tore</span></div>
-            <div class="stat-col"><span class="v">${pct}%</span><span class="l">Quote</span></div>
+          <div class="stat-row" style="margin-bottom:14px;">
+            <div class="stat-col"><span class="val">${s.total}</span><span class="lbl">Würfe</span></div>
+            <div class="stat-col"><span class="val ${isOwn ? 'text-green' : 'text-red'}">${s.goals}</span><span class="lbl">${isOwn ? 'Tore' : 'Gegentore'}</span></div>
+            <div class="stat-col"><span class="val">${pct}%</span><span class="lbl">Quote</span></div>
           </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <span class="badge" style="background:rgba(232,72,85,0.15);color:#e84855;">${s.misses} Fehlschüsse</span>
             <span class="badge" style="background:rgba(240,165,0,0.15);color:#f0a500;">${s.blocks} Geblockt</span>
             <span class="badge" style="background:rgba(74,144,217,0.15);color:#4a90d9;">${s.posts} Pfosten</span>
           </div>
+          <div class="stat-zusatz">
+            ${App.data.getTagStats(activeGameId, isOwn ? 'own' : 'opp', half).map(tag => `
+              <div class="sz-zeile">
+                <span>${tag.label}</span>
+                <strong>${tag.shots > 0 ? `${tag.goals}/${tag.shots} · ${tag.pct}%` : '—'}</strong>
+              </div>`).join('')}
+            <div class="sz-zeile">
+              <span>Technische Fehler</span>
+              <strong>${App.data.getTurnoverStats(activeGameId, isOwn ? 'own' : 'opp', half).total}</strong>
+            </div>
+          </div>
         `;
       }
 
-      function renderSecondary() {
-        // Nur im Gegner-Reiter: Torwart-Heatmap, wo wir kassieren.
-        const host = document.getElementById('secondary-panel');
+      /**
+       * Torzonen-Raster. Frueher lag das in zwei fast gleichen Funktionen mit
+       * verschiedenen Panel-IDs — dadurch sahen eigene Wuerfe und Gegnerwuerfe
+       * unterschiedlich aus, obwohl beide dasselbe zeigen.
+       */
+      function renderGoalZone() {
+        const host = document.getElementById('goalzone-panel');
         if (!host) return;
-        const gz = App.data.getGoalZoneStats(activeGameId, 'opp', half);
-        host.className = '';
+        const gz = App.data.getGoalZoneStats(activeGameId, isOwn ? 'own' : 'opp', half);
+
         if (gz.total === 0) {
-          host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine Gegner-Tore mit Torzone erfasst.<br>Trage Gegner-Würfe mit Torzone ein (Spielmodus → Abwehr).</div>';
-        } else {
-          host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm" style="text-align:center;margin-top:8px">Aus Sicht des Torwarts · Zahl = kassierte Tore</div>';
-          host.querySelector('.goalzone-host').appendChild(App.court.buildGoalZoneGrid(gz));
+          host.innerHTML = `<div class="text-muted analyse-leer">
+            Noch keine ${isOwn ? 'eigenen Tore' : 'Gegner-Tore'} mit Torzone erfasst.<br>
+            ${isOwn ? 'Trage Würfe im Spielmodus mit Torzone ein.'
+                    : 'Trage Gegner-Würfe mit Torzone ein (Spielmodus → Abwehr).'}</div>`;
+          return;
         }
+
+        host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm analyse-fuss"></div>';
+        host.querySelector('.goalzone-host')
+            .appendChild(App.court.buildGoalZoneGrid(gz, isOwn ? '63,185,104' : undefined));
+        host.querySelector('.analyse-fuss').textContent = isOwn
+          ? 'Aus eigener Sicht · Zahl = erzielte Tore'
+          : 'Aus Sicht des Torwarts · Zahl = kassierte Tore';
+      }
+
+      /**
+       * Trefferquote je Feldposition — die genaue Zahl zur Wurfkarte. Aus den
+       * Punkten auf dem Feld laesst sich "3 von 5 vom Kreis" nicht ablesen,
+       * und beim Gegner ist genau das die Frage: wo macht die Abwehr auf?
+       */
+      function renderPositionStats() {
+        const host = document.getElementById('position-stats-panel');
+        if (!host) return;
+        const zeilen = App.data.getPositionStats(activeGameId, isOwn ? 'own' : 'opp', half);
+
+        if (zeilen.length === 0) {
+          host.innerHTML = `<div class="text-muted analyse-leer">
+            Noch keine ${isOwn ? 'Würfe' : 'Gegner-Würfe'} erfasst</div>`;
+          return;
+        }
+
+        const name = z => z.position === 'ohne'
+          ? 'Ohne Position'
+          : (App.court.ZONE_LABELS[z.position] || z.position);
+
+        // Die Tabelle ist nach Toren sortiert, die Spitze steht also oben.
+        // Trotzdem einmal ausgeschrieben: das ist die Frage, die man stellt.
+        const spitze = zeilen[0];
+        const kopf = spitze.goals > 0
+          ? `<div class="analyse-kopf">${isOwn ? 'Stärkste Position' : 'Meiste Gegentore'}:
+               <strong>${name(spitze)}</strong> — ${spitze.goals} aus ${spitze.shots} Würfen.</div>`
+          : '';
+
+        host.innerHTML = `
+          ${kopf}
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Position</th>
+                <th class="num">${isOwn ? 'Tore' : 'Gegentore'}</th>
+                <th class="num">Würfe</th>
+                <th class="num">Quote</th>
+              </tr></thead>
+              <tbody>${zeilen.map(z => `
+                <tr>
+                  <td>${name(z)}</td>
+                  <td class="num"><strong>${z.goals}</strong></td>
+                  <td class="num">${z.shots}</td>
+                  <td class="num">${z.pct}%</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
       }
 
       /**
@@ -700,18 +777,6 @@ App.views = (function () {
             pct: e.wuerfe > 0 ? Math.round(e.tore / e.wuerfe * 100) : 0,
           }))
           .sort((a, b) => b.tore - a.tore || b.pct - a.pct);
-      }
-
-      function renderOwnGoalZone() {
-        const host = document.getElementById('own-goalzone-panel');
-        if (!host) return;
-        const gz = App.data.getGoalZoneStats(activeGameId, 'own', half);
-        if (gz.total === 0) {
-          host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine eigenen Tore mit Torzone erfasst.<br>Trage Würfe im Spielmodus mit Torzone ein.</div>';
-        } else {
-          host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm" style="text-align:center;margin-top:8px">Aus eigener Sicht · Zahl = erzielte Tore</div>';
-          host.querySelector('.goalzone-host').appendChild(App.court.buildGoalZoneGrid(gz, '63,185,104'));
-        }
       }
 
       refresh();
@@ -1090,6 +1155,7 @@ App.views = (function () {
               <button class="outcome-btn ob-miss"  data-side="own" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="own" data-oc="block">Geblockt</button>
             </div>
+            <button class="event-btn" data-side="own" data-event="turnover">Technischer Fehler</button>
           </div>
           <div class="live-quick-panel matchform-panel">
             <div class="live-quick-label matchform-panel-label">Gegner-Würfe</div>
@@ -1098,6 +1164,7 @@ App.views = (function () {
               <button class="outcome-btn ob-miss"  data-side="opp" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="opp" data-oc="block">Geblockt</button>
             </div>
+            <button class="event-btn" data-side="opp" data-event="turnover">Technischer Fehler</button>
           </div>
         </div>
 
@@ -1154,6 +1221,37 @@ App.views = (function () {
     }
 
     const OC_LABEL = { goal: 'Tor', miss: 'Fehlschuss', block: 'Geblockt', post: 'Pfosten' };
+
+    /**
+     * Merkmalsreihe fuer die Wurfmasken. Bewusst zuschaltbare Marken und
+     * keine weiteren Ergebnis-Knoepfe: das Ergebnis ist genau eines von
+     * vieren, ein Merkmal kann daneben zutreffen. Kommt ein Merkmal dazu,
+     * reicht ein Eintrag in App.data.SHOT_TAGS.
+     */
+    function tagRowHTML() {
+      return `
+        <div class="form-group">
+          <label>Merkmale <span class="lm-field-hint">optional, mehrere möglich</span></label>
+          <div class="tag-btn-group">
+            ${App.data.SHOT_TAGS.map(tag =>
+              `<button type="button" class="tag-btn" data-tag="${tag.id}">${tag.label}</button>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    /** Klick-Logik dazu; liefert das Set, das beim Speichern gelesen wird. */
+    function tagRowBinden() {
+      const gewaehlt = new Set();
+      document.querySelectorAll('#modal-body .tag-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.tag;
+          if (gewaehlt.has(id)) gewaehlt.delete(id); else gewaehlt.add(id);
+          btn.classList.toggle('selected', gewaehlt.has(id));
+        });
+      });
+      return gewaehlt;
+    }
+
     const RI_ICON = {
       own: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h9M7 4l4 4-4 4"/></svg>',
       opp: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5 14 4v4.2c0 4-2.6 6.6-6 7.3-3.4-.7-6-3.3-6-7.3V4z"/></svg>'
@@ -1162,10 +1260,15 @@ App.views = (function () {
     function refreshRecent() {
       const host = document.getElementById('live-recent');
       if (!host) return;
-      const ownShots = App.data.getShots(currentGameId).map(s => ({ ...s, side: 'own' }));
-      const oppShots = App.data.getOpponentShots(currentGameId).map(s => ({ ...s, side: 'opp' }));
-      const totalCount = ownShots.length + oppShots.length;
-      const all = [...ownShots, ...oppShots].sort((a, b) => b.id - a.id).slice(0, 6);
+      const ownShots = App.data.getShots(currentGameId).map(s => ({ ...s, side: 'own', art: 'shot' }));
+      const oppShots = App.data.getOpponentShots(currentGameId).map(s => ({ ...s, side: 'opp', art: 'shot' }));
+      const fehler   = App.data.getTurnovers(currentGameId).map(v => ({ ...v, art: 'turnover' }));
+      const totalCount = ownShots.length + oppShots.length + fehler.length;
+      // Nach Uhrzeit sortieren, nicht nach id: die drei Sorten haben eigene
+      // Zaehler, deren Zahlen sich sonst wild ineinanderschieben.
+      const all = [...ownShots, ...oppShots, ...fehler]
+        .sort((a, b) => (b.wallClock || 0) - (a.wallClock || 0) || b.id - a.id)
+        .slice(0, 6);
       const players = App.data.getPlayers();
 
       if (all.length === 0) {
@@ -1182,6 +1285,16 @@ App.views = (function () {
             : (s.opponentPlayer ? `Gegner ${s.opponentPlayer}` : 'Gegner');
           const posLabel = s.position ? ` · ${App.court.ZONE_LABELS[s.position] || s.position}` : '';
           const minLabel = s.minute ? `, ${s.minute}'` : '';
+          const tagLabel = Array.isArray(s.tags) && s.tags.length
+            ? ' ' + s.tags.map(id => {
+                const tag = App.data.SHOT_TAGS.find(x => x.id === id);
+                return tag ? `<span class="ri-tag">${tag.kurz}</span>` : '';
+              }).join('')
+            : '';
+          // Was passiert ist: bei Wuerfen das Ergebnis, sonst das Ereignis.
+          const was = s.art === 'turnover'
+            ? `Technischer Fehler${s.kind ? ` · ${(App.data.TURNOVER_KINDS.find(a => a.id === s.kind) || {}).label}` : ''}`
+            : (OC_LABEL[s.outcome] || s.outcome);
           // Sprung zur Szene — nur sinnvoll, wenn eine Aufnahme geladen ist und
           // der Eintrag beim Erfassen eine Videoposition mitbekommen hat.
           const jump = (App.video.isLoaded() && s.videoTime != null)
@@ -1191,9 +1304,9 @@ App.views = (function () {
           return `<div class="live-recent-item">
             <span class="ri-num">${totalCount - i}</span>
             <span class="ri-icon ${s.side === 'own' ? 'ri-own' : 'ri-opp'}">${s.side === 'own' ? RI_ICON.own : RI_ICON.opp}</span>
-            <span class="ri-text">${who} — <strong>${OC_LABEL[s.outcome] || s.outcome}</strong>${posLabel}${minLabel}</span>
+            <span class="ri-text">${who} — <strong>${was}</strong>${posLabel}${minLabel}${tagLabel}</span>
             ${jump}
-            <button class="ri-del" data-del-id="${s.id}" data-del-side="${s.side}">×</button>
+            <button class="ri-del" data-del-id="${s.id}" data-del-side="${s.side}" data-del-art="${s.art}">×</button>
           </div>`;
         }).join('')}
       `;
@@ -1213,7 +1326,8 @@ App.views = (function () {
       const btn = e.target.closest('[data-del-id]');
       if (!btn) return;
       const id = parseInt(btn.dataset.delId);
-      if (btn.dataset.delSide === 'own') App.data.deleteShot(id);
+      if (btn.dataset.delArt === 'turnover') App.data.deleteTurnover(id);
+      else if (btn.dataset.delSide === 'own') App.data.deleteShot(id);
       else App.data.deleteOpponentShot(id);
       refreshScore();
       refreshRecent();
@@ -1386,6 +1500,13 @@ App.views = (function () {
 
     // Quick-Entry: Ergebnis direkt auf dem Hauptbildschirm wählen → Modal öffnet sich mit vorgegebenem Ergebnis
     document.querySelector('.live-quick-wrap').addEventListener('click', e => {
+      // Ereignisse ohne Wurf laufen ueber einen eigenen Knopf — sie haben
+      // weder Wurfort noch Ergebnis und gehoeren nicht in die Ergebnisreihe.
+      const ereignis = e.target.closest('.event-btn');
+      if (ereignis) {
+        openTurnoverModal(currentGameId, currentMinute(), ereignis.dataset.side);
+        return;
+      }
       const btn = e.target.closest('.outcome-btn');
       if (!btn) return;
       if (btn.dataset.side === 'own') openAttackModal(currentGameId, currentMinute(), btn.dataset.oc);
@@ -1865,6 +1986,7 @@ App.views = (function () {
               <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
             </div>
           </div>` : ''}
+          ${tagRowHTML()}
           <div class="form-group">
             <label>Minute</label>
             <input class="form-control" id="lm-minute" type="number" min="1" max="70" value="${autoMinute || ''}">
@@ -1968,16 +2090,101 @@ App.views = (function () {
           });
         }
 
+        const gewaehlteTags = tagRowBinden();
+
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const pos = selectedPos || { rx: 0.75, ry: 0.5 };
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
           App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, half: currentHalf(minute), rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone,
+            tags: [...gewaehlteTags],
             clockSec: ts.timerSeconds, wallClock: Date.now(),
             ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}) });
           App.ui.closeModal();
           App.ui.toast('Wurf gespeichert', 'ok');
           refreshScore();
+          refreshRecent();
+        });
+      }, 0);
+    }
+
+    /**
+     * Technischer Fehler — ein Ereignis ohne Wurf.
+     *
+     * Bewusst eine eigene, sehr kurze Maske statt eines fuenften
+     * Ergebnis-Knopfes: ein Schrittfehler hat keinen Wurfort, kein Ergebnis
+     * und keine Torzone. Als Wurf gefuehrt wuerde er jede Trefferquote
+     * verfaelschen, weil er den Nenner erhoeht, ohne je ein Tor sein zu
+     * koennen. Beim Gegner wird nur gezaehlt — welcher Gegenspieler den
+     * Ball verliert, sieht man von der Bank ohnehin selten.
+     */
+    function openTurnoverModal(gameId, autoMinute, side = 'own') {
+      const eigene = side === 'own';
+      let selectedPlayerId = null;
+      let selectedKind = null;
+
+      const kaderKomplett = App.data.getPlayers();
+      const kaderHeute    = App.data.getMatchdaySquad(gameId);
+      const players = App.data.hasMatchdaySquad(gameId) && kaderHeute.length > 0
+        ? kaderHeute : kaderKomplett;
+
+      const html = `
+        ${eigene && players.length > 0 ? `
+        <div class="form-group">
+          <label>Spieler <span class="lm-field-hint">optional</span></label>
+          <div class="live-player-grid" id="tv-players">
+            ${playerButtonsHTML(players, getPlayerSort(), gameId)}
+          </div>
+        </div>` : ''}
+        <div class="form-group">
+          <label>Art <span class="lm-field-hint">optional</span></label>
+          <div class="tag-btn-group">
+            ${App.data.TURNOVER_KINDS.map(a =>
+              `<button type="button" class="tag-btn" data-kind="${a.id}">${a.label}</button>`).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Minute</label>
+          <input class="form-control" id="tv-minute" type="number" min="1" max="70" value="${autoMinute || ''}">
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-outline" onclick="App.ui.closeModal()">Abbrechen</button>
+          <button class="btn btn-primary" id="tv-save" style="flex:1;padding:10px;font-size:14px">Speichern</button>
+        </div>`;
+
+      App.ui.openModal(eigene ? 'Technischer Fehler' : 'Technischer Fehler (Gegner)', html);
+      document.getElementById('modal-box').classList.add('modal-matchform');
+
+      setTimeout(() => {
+        document.getElementById('tv-players')?.addEventListener('click', e => {
+          const btn = e.target.closest('[data-pid]');
+          if (!btn) return;
+          const id = parseInt(btn.dataset.pid);
+          // Nochmal antippen hebt die Auswahl auf — der Spieler ist optional,
+          // und ohne Rueckweg waere ein Fehlgriff nicht mehr zu korrigieren.
+          selectedPlayerId = (selectedPlayerId === id) ? null : id;
+          document.querySelectorAll('#tv-players .live-player-btn').forEach(b => b.classList.remove('selected'));
+          if (selectedPlayerId != null) btn.classList.add('selected');
+        });
+
+        document.querySelectorAll('#modal-body .tag-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            selectedKind = (selectedKind === btn.dataset.kind) ? null : btn.dataset.kind;
+            document.querySelectorAll('#modal-body .tag-btn').forEach(b => b.classList.remove('selected'));
+            if (selectedKind) btn.classList.add('selected');
+          });
+        });
+
+        document.getElementById('tv-save')?.addEventListener('click', () => {
+          const minute = parseInt(document.getElementById('tv-minute')?.value) || null;
+          App.data.addTurnover({
+            gameId, side, kind: selectedKind, minute, half: currentHalf(minute),
+            playerId: eigene ? selectedPlayerId : null,
+            clockSec: ts.timerSeconds, wallClock: Date.now(),
+            ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}),
+          });
+          App.ui.closeModal();
+          App.ui.toast('Technischer Fehler gespeichert', 'ok');
           refreshRecent();
         });
       }, 0);
@@ -2029,6 +2236,7 @@ App.views = (function () {
             ${ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
           </div>
         </div>` : ''}
+        ${tagRowHTML()}
         <div class="form-group">
           <label>Minute</label>
           <input class="form-control" id="lm-minute" type="number" min="1" max="70" value="${autoMinute || ''}">
@@ -2123,11 +2331,14 @@ App.views = (function () {
           });
         }
 
+        const gegnerTags = tagRowBinden();
+
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
           const pos = selectedOppPos || { rx: 0.25, ry: 0.5 };
           App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, half: currentHalf(minute), rx: pos.rx, ry: pos.ry, position: selectedOppPosition, goalZone: selectedZone,
+            tags: [...gegnerTags],
             clockSec: ts.timerSeconds, wallClock: Date.now(),
             ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}) });
           if (selectedOutcome === 'goal') {

@@ -207,6 +207,26 @@ body {
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
 
+/* Analyse-Raster.
+   Wurfstatistik (drei Zahlen) und Torzonen (ein 3x3-Gitter) brauchen wenig
+   Platz, die beiden Tabellen viel. Ein Drittel je Karte wie bei .grid-3 hiess
+   halbleere Kaesten neben gequetschten Tabellen — deshalb ein 12er-Raster.
+   Eigene Wuerfe und Gegnerwuerfe benutzen dieselben Klassen, damit beide
+   Reiter gleich aussehen. */
+.analyse-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.analyse-grid > .analyse-schmal { grid-column: span 3; }
+.analyse-grid > .analyse-halb   { grid-column: span 6; }
+.analyse-grid > .analyse-voll   { grid-column: span 12; }
+
+.analyse-kopf  { font-size: 13px; line-height: 1.45; margin-bottom: 12px; }
+.analyse-fuss  { text-align: center; margin-top: 8px; }
+.analyse-leer  { padding: 20px; text-align: center; }
+
 .section { margin-bottom: 24px; }
 .section-header {
   display: flex;
@@ -1102,6 +1122,10 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 
 /* iPad (Hochformat) & schmale Fenster: Sidebar wird zur Icon-Leiste */
 @media (max-width: 1024px) {
+  /* Tablet quer: Tabellen auf volle Breite, die schmalen Karten nebeneinander */
+  .analyse-grid > .analyse-schmal { grid-column: span 6; }
+  .analyse-grid > .analyse-halb   { grid-column: span 12; }
+
   :root { --sidebar-w: 64px; }
   .sidebar-brand { justify-content: center; padding: 16px 8px; }
   .brand-text { display: none; }
@@ -1119,6 +1143,11 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 
 /* Handy: Sidebar wird zur unteren Tab-Leiste */
 @media (max-width: 700px) {
+  /* Klassen statt `> *`: sonst gewinnt die spezifischere Grundregel oben */
+  .analyse-grid > .analyse-schmal,
+  .analyse-grid > .analyse-halb,
+  .analyse-grid > .analyse-voll { grid-column: span 12; }
+
   :root { --sidebar-w: 0px; }
   .sidebar {
     top: auto; right: 0;
@@ -1294,7 +1323,101 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
   transition: background-color 0.12s;
 }
 .matchform-check-group .outcome-btn { border: 1.5px solid var(--form-rule); }
+.matchform .event-btn,
+.modal-matchform .tag-btn { border-color: var(--form-rule); color: var(--form-ink-dim); }
+.matchform .event-btn:hover,
+.modal-matchform .tag-btn:hover { color: var(--form-ink); border-color: var(--form-ink-dim); }
+.modal-matchform .tag-btn.selected { color: var(--form-ink); border-color: currentColor; }
 .matchform-check-group .outcome-btn:hover { border-color: currentColor; }
+
+/* ── Merkmale und Ereignisse ──────────────────────────────────────
+   Merkmale sind additiv, das Ergebnis ist es nicht. Damit man das sieht
+   und nicht nur weiss: Merkmale tragen ein Kaestchen (mehrere moeglich),
+   die Art eines technischen Fehlers einen Kreis (genau eine). Das ist die
+   Unterscheidung, die jedes Papierformular auch macht.
+   Ausgefuellt wird das Zeichen selbst — die Bedeutung haengt nie allein an
+   einer Randfarbe. */
+.tag-btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border);
+  background: none;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.tag-btn::before {
+  content: '';
+  width: 12px; height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  flex-shrink: 0;
+  transition: background-color .12s;
+}
+.tag-btn[data-kind]::before { border-radius: 50%; }
+.tag-btn:hover { color: var(--text-1); border-color: var(--text-2); }
+.tag-btn.selected { color: var(--text-1); border-color: currentColor; }
+.tag-btn.selected::before { background: currentColor; }
+
+/* Ereignis ohne Wurf. Bewusst zurueckhaltender als die Ergebnisknoepfe:
+   es ist kein Wurf und soll im Spiel nicht mit ihnen verwechselt werden. */
+.event-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 8px;
+  border-radius: 4px;
+  border: 1.5px dashed var(--border);
+  background: none;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.event-btn:hover { color: var(--text-1); border-color: var(--text-2); }
+
+/* Merkmal im Protokoll */
+.ri-tag {
+  display: inline-block;
+  padding: 1px 5px;
+  margin-left: 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+/* Zusatzzeilen unter der Wurfstatistik */
+.stat-zusatz {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sz-zeile {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.sz-zeile strong { color: var(--text-1); font-size: 13px; }
 
 /* ── Ereignisprotokoll ────────────────────────────────────────────── */
 .matchform-log {
