@@ -12,20 +12,55 @@ App.data = (function () {
     games: [],
     shots: [],
     opponentShots: [],
-    _seq: { player: 1, game: 1, shot: 1, oppShot: 1 }
+    // Technische Fehler sind KEINE Wuerfe: kein Wurfort, kein Ergebnis, keine
+    // Torzone. Sie in shots mitzufuehren wuerde jede Quote verfaelschen.
+    turnovers: [],
+    _seq: { player: 1, game: 1, shot: 1, oppShot: 1, turnover: 1 }
   };
+
+  /**
+   * Merkmale eines Wurfs — additiv, im Gegensatz zum Ergebnis.
+   *
+   * Das Ergebnis ist genau eines von vieren (Tor, Fehlschuss, Geblockt,
+   * Pfosten). Ein Merkmal beschreibt daneben, WIE der Wurf zustande kam, und
+   * kann zutreffen oder nicht. Beides in dieselbe Knopfreihe zu legen waere
+   * der schnelle Weg zu einem Formular, das keiner mehr bedienen kann.
+   *
+   * Neue Merkmale kommen hier dazu — Formular, Protokoll und Analyse lesen
+   * alle aus dieser Liste, angefasst werden muss dafuer nichts.
+   */
+  const SHOT_TAGS = [
+    { id: 'tempo', label: 'Tempogegenstoß', kurz: 'TGS' },
+  ];
+
+  /** Art des technischen Fehlers. Optional — Hauptsache, er ist gezaehlt. */
+  const TURNOVER_KINDS = [
+    { id: 'schritte', label: 'Schrittfehler' },
+    { id: 'prellen',  label: 'Prellfehler' },
+    { id: 'pass',     label: 'Fehlpass' },
+    { id: 'stuermer', label: 'Stürmerfoul' },
+    { id: 'sonst',    label: 'Sonstiges' },
+  ];
+
+  /**
+   * Aeltere Staende auffuellen. Wird beim Laden UND beim Wiederherstellen
+   * einer Sicherung gebraucht: eine Sicherung von vor einem neuen Feld
+   * brachte sonst keinen Zaehler mit, und nextId lieferte NaN.
+   */
+  function migriere(s) {
+    if (!s._seq || typeof s._seq !== 'object') s._seq = {};
+    Object.keys(DEFAULTS._seq).forEach(k => {
+      if (!s._seq[k]) s._seq[k] = 1;
+    });
+    if (!Array.isArray(s.opponentShots)) s.opponentShots = [];
+    if (!Array.isArray(s.turnovers))     s.turnovers = [];
+    return s;
+  }
 
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // Ensure _seq exists (migration guard)
-        if (!parsed._seq) parsed._seq = { player: 1, game: 1, shot: 1, oppShot: 1 };
-        if (!parsed._seq.oppShot) parsed._seq.oppShot = 1;
-        if (!parsed.opponentShots) parsed.opponentShots = [];
-        return parsed;
-      }
+      if (raw) return migriere(JSON.parse(raw));
     } catch (e) { /* ignore */ }
     return JSON.parse(JSON.stringify(DEFAULTS));
   }
@@ -468,6 +503,62 @@ App.data = (function () {
      * nur die Tore — sonst gaebe es keine Quote. Wuerfe ohne Position
      * (aeltere Eintraege) laufen unter 'ohne' mit, statt zu verschwinden.
      */
+    // ── Merkmale und technische Fehler ────────────────────
+    SHOT_TAGS,
+    TURNOVER_KINDS,
+
+    /**
+     * Wie viele Wuerfe trugen ein Merkmal, und wie viele davon sassen?
+     * Eine Zeile je Merkmal — die Analyse muss nicht wissen, welche es gibt.
+     */
+    getTagStats(gameId, side = 'own', half) {
+      const shots = side === 'own'
+        ? this.getShots(gameId, half)
+        : this.getOpponentShots(gameId, half);
+
+      return SHOT_TAGS.map(tag => {
+        const mit = shots.filter(s => Array.isArray(s.tags) && s.tags.includes(tag.id));
+        const goals = mit.filter(s => s.outcome === 'goal').length;
+        return {
+          ...tag,
+          shots: mit.length,
+          goals,
+          pct: mit.length > 0 ? Math.round(goals / mit.length * 100) : 0,
+        };
+      });
+    },
+
+    // ── Technische Fehler ─────────────────────────────────
+    getTurnovers(gameId, side, half) {
+      let liste = gameId != null
+        ? state.turnovers.filter(v => v.gameId === gameId)
+        : [...state.turnovers];
+      if (side === 'own' || side === 'opp') liste = liste.filter(v => v.side === side);
+      return byHalf(liste, half);
+    },
+
+    addTurnover(data) {
+      const v = { id: nextId('turnover'), side: 'own', ...data };
+      state.turnovers.push(v);
+      persist(state);
+      return v;
+    },
+
+    deleteTurnover(id) {
+      state.turnovers = state.turnovers.filter(v => v.id !== id);
+      persist(state);
+    },
+
+    /** Anzahl je Art plus Gesamtzahl. */
+    getTurnoverStats(gameId, side = 'own', half) {
+      const liste = this.getTurnovers(gameId, side, half);
+      const proArt = TURNOVER_KINDS
+        .map(art => ({ ...art, anzahl: liste.filter(v => v.kind === art.id).length }))
+        .filter(a => a.anzahl > 0)
+        .sort((a, b) => b.anzahl - a.anzahl);
+      return { total: liste.length, proArt, ohneArt: liste.filter(v => !v.kind).length };
+    },
+
     getPositionStats(gameId, side = 'own', half) {
       const shots = side === 'own'
         ? this.getShots(gameId, half)
@@ -542,12 +633,26 @@ App.data = (function () {
       const g = state.games.find(g => g.id === gameId);
       return g ? (g.opponentRoster || []) : [];
     },
+    /**
+     * Gegenspieler anlegen. Gibt den Namen zurueck, damit der Aufrufer ihn
+     * gleich auswaehlen kann.
+     *
+     * Doppelte werden nicht angelegt: die Auswahl im Formular laeuft ueber
+     * den Namen, zwei Eintraege "7" waeren beide markiert und man saehe nicht
+     * mehr, welcher gemeint ist.
+     */
     addOpponentPlayer(gameId, name) {
+      const sauber = String(name || '').trim();
+      if (!sauber) return null;
       const i = state.games.findIndex(g => g.id === gameId);
-      if (i < 0) return;
+      if (i < 0) return null;
       if (!state.games[i].opponentRoster) state.games[i].opponentRoster = [];
-      state.games[i].opponentRoster.push(name.trim());
+      const vorhanden = state.games[i].opponentRoster
+        .find(n => n.toLowerCase() === sauber.toLowerCase());
+      if (vorhanden) return vorhanden;
+      state.games[i].opponentRoster.push(sauber);
       persist(state);
+      return sauber;
     },
     removeOpponentPlayer(gameId, idx) {
       const i = state.games.findIndex(g => g.id === gameId);
@@ -687,7 +792,7 @@ App.data = (function () {
         const parsed = JSON.parse(s);
         // Nur echte Sicherungen akzeptieren — eine falsche Datei würde die App zerschießen
         if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.players) || !Array.isArray(parsed.games)) return false;
-        state = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), parsed);
+        state = migriere(Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), parsed));
         persist(state);
         return true;
       }

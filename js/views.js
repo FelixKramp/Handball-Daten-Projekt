@@ -631,6 +631,17 @@ App.views = (function () {
             <span class="badge" style="background:rgba(240,165,0,0.15);color:#f0a500;">${s.blocks} Geblockt</span>
             <span class="badge" style="background:rgba(74,144,217,0.15);color:#4a90d9;">${s.posts} Pfosten</span>
           </div>
+          <div class="stat-zusatz">
+            ${App.data.getTagStats(activeGameId, isOwn ? 'own' : 'opp', half).map(tag => `
+              <div class="sz-zeile">
+                <span>${tag.label}</span>
+                <strong>${tag.shots > 0 ? `${tag.goals}/${tag.shots} · ${tag.pct}%` : '—'}</strong>
+              </div>`).join('')}
+            <div class="sz-zeile">
+              <span>Technische Fehler</span>
+              <strong>${App.data.getTurnoverStats(activeGameId, isOwn ? 'own' : 'opp', half).total}</strong>
+            </div>
+          </div>
         `;
       }
 
@@ -1144,6 +1155,7 @@ App.views = (function () {
               <button class="outcome-btn ob-miss"  data-side="own" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="own" data-oc="block">Geblockt</button>
             </div>
+            <button class="event-btn" data-side="own" data-event="turnover">Technischer Fehler</button>
           </div>
           <div class="live-quick-panel matchform-panel">
             <div class="live-quick-label matchform-panel-label">Gegner-Würfe</div>
@@ -1152,6 +1164,7 @@ App.views = (function () {
               <button class="outcome-btn ob-miss"  data-side="opp" data-oc="miss">Fehlschuss</button>
               <button class="outcome-btn ob-block" data-side="opp" data-oc="block">Geblockt</button>
             </div>
+            <button class="event-btn" data-side="opp" data-event="turnover">Technischer Fehler</button>
           </div>
         </div>
 
@@ -1208,6 +1221,37 @@ App.views = (function () {
     }
 
     const OC_LABEL = { goal: 'Tor', miss: 'Fehlschuss', block: 'Geblockt', post: 'Pfosten' };
+
+    /**
+     * Merkmalsreihe fuer die Wurfmasken. Bewusst zuschaltbare Marken und
+     * keine weiteren Ergebnis-Knoepfe: das Ergebnis ist genau eines von
+     * vieren, ein Merkmal kann daneben zutreffen. Kommt ein Merkmal dazu,
+     * reicht ein Eintrag in App.data.SHOT_TAGS.
+     */
+    function tagRowHTML() {
+      return `
+        <div class="form-group">
+          <label>Merkmale <span class="lm-field-hint">optional, mehrere möglich</span></label>
+          <div class="tag-btn-group">
+            ${App.data.SHOT_TAGS.map(tag =>
+              `<button type="button" class="tag-btn" data-tag="${tag.id}">${tag.label}</button>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    /** Klick-Logik dazu; liefert das Set, das beim Speichern gelesen wird. */
+    function tagRowBinden() {
+      const gewaehlt = new Set();
+      document.querySelectorAll('#modal-body .tag-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.tag;
+          if (gewaehlt.has(id)) gewaehlt.delete(id); else gewaehlt.add(id);
+          btn.classList.toggle('selected', gewaehlt.has(id));
+        });
+      });
+      return gewaehlt;
+    }
+
     const RI_ICON = {
       own: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h9M7 4l4 4-4 4"/></svg>',
       opp: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5 14 4v4.2c0 4-2.6 6.6-6 7.3-3.4-.7-6-3.3-6-7.3V4z"/></svg>'
@@ -1216,10 +1260,15 @@ App.views = (function () {
     function refreshRecent() {
       const host = document.getElementById('live-recent');
       if (!host) return;
-      const ownShots = App.data.getShots(currentGameId).map(s => ({ ...s, side: 'own' }));
-      const oppShots = App.data.getOpponentShots(currentGameId).map(s => ({ ...s, side: 'opp' }));
-      const totalCount = ownShots.length + oppShots.length;
-      const all = [...ownShots, ...oppShots].sort((a, b) => b.id - a.id).slice(0, 6);
+      const ownShots = App.data.getShots(currentGameId).map(s => ({ ...s, side: 'own', art: 'shot' }));
+      const oppShots = App.data.getOpponentShots(currentGameId).map(s => ({ ...s, side: 'opp', art: 'shot' }));
+      const fehler   = App.data.getTurnovers(currentGameId).map(v => ({ ...v, art: 'turnover' }));
+      const totalCount = ownShots.length + oppShots.length + fehler.length;
+      // Nach Uhrzeit sortieren, nicht nach id: die drei Sorten haben eigene
+      // Zaehler, deren Zahlen sich sonst wild ineinanderschieben.
+      const all = [...ownShots, ...oppShots, ...fehler]
+        .sort((a, b) => (b.wallClock || 0) - (a.wallClock || 0) || b.id - a.id)
+        .slice(0, 6);
       const players = App.data.getPlayers();
 
       if (all.length === 0) {
@@ -1236,6 +1285,16 @@ App.views = (function () {
             : (s.opponentPlayer ? `Gegner ${s.opponentPlayer}` : 'Gegner');
           const posLabel = s.position ? ` · ${App.court.ZONE_LABELS[s.position] || s.position}` : '';
           const minLabel = s.minute ? `, ${s.minute}'` : '';
+          const tagLabel = Array.isArray(s.tags) && s.tags.length
+            ? ' ' + s.tags.map(id => {
+                const tag = App.data.SHOT_TAGS.find(x => x.id === id);
+                return tag ? `<span class="ri-tag">${tag.kurz}</span>` : '';
+              }).join('')
+            : '';
+          // Was passiert ist: bei Wuerfen das Ergebnis, sonst das Ereignis.
+          const was = s.art === 'turnover'
+            ? `Technischer Fehler${s.kind ? ` · ${(App.data.TURNOVER_KINDS.find(a => a.id === s.kind) || {}).label}` : ''}`
+            : (OC_LABEL[s.outcome] || s.outcome);
           // Sprung zur Szene — nur sinnvoll, wenn eine Aufnahme geladen ist und
           // der Eintrag beim Erfassen eine Videoposition mitbekommen hat.
           const jump = (App.video.isLoaded() && s.videoTime != null)
@@ -1245,9 +1304,9 @@ App.views = (function () {
           return `<div class="live-recent-item">
             <span class="ri-num">${totalCount - i}</span>
             <span class="ri-icon ${s.side === 'own' ? 'ri-own' : 'ri-opp'}">${s.side === 'own' ? RI_ICON.own : RI_ICON.opp}</span>
-            <span class="ri-text">${who} — <strong>${OC_LABEL[s.outcome] || s.outcome}</strong>${posLabel}${minLabel}</span>
+            <span class="ri-text">${who} — <strong>${was}</strong>${posLabel}${minLabel}${tagLabel}</span>
             ${jump}
-            <button class="ri-del" data-del-id="${s.id}" data-del-side="${s.side}">×</button>
+            <button class="ri-del" data-del-id="${s.id}" data-del-side="${s.side}" data-del-art="${s.art}">×</button>
           </div>`;
         }).join('')}
       `;
@@ -1267,7 +1326,8 @@ App.views = (function () {
       const btn = e.target.closest('[data-del-id]');
       if (!btn) return;
       const id = parseInt(btn.dataset.delId);
-      if (btn.dataset.delSide === 'own') App.data.deleteShot(id);
+      if (btn.dataset.delArt === 'turnover') App.data.deleteTurnover(id);
+      else if (btn.dataset.delSide === 'own') App.data.deleteShot(id);
       else App.data.deleteOpponentShot(id);
       refreshScore();
       refreshRecent();
@@ -1440,6 +1500,13 @@ App.views = (function () {
 
     // Quick-Entry: Ergebnis direkt auf dem Hauptbildschirm wählen → Modal öffnet sich mit vorgegebenem Ergebnis
     document.querySelector('.live-quick-wrap').addEventListener('click', e => {
+      // Ereignisse ohne Wurf laufen ueber einen eigenen Knopf — sie haben
+      // weder Wurfort noch Ergebnis und gehoeren nicht in die Ergebnisreihe.
+      const ereignis = e.target.closest('.event-btn');
+      if (ereignis) {
+        openTurnoverModal(currentGameId, currentMinute(), ereignis.dataset.side);
+        return;
+      }
       const btn = e.target.closest('.outcome-btn');
       if (!btn) return;
       if (btn.dataset.side === 'own') openAttackModal(currentGameId, currentMinute(), btn.dataset.oc);
@@ -1919,6 +1986,7 @@ App.views = (function () {
               <button class="outcome-btn ob-block" data-oc="block">Geblockt</button>
             </div>
           </div>` : ''}
+          ${tagRowHTML()}
           <div class="form-group">
             <label>Minute</label>
             <input class="form-control" id="lm-minute" type="number" min="1" max="70" value="${autoMinute || ''}">
@@ -2022,16 +2090,101 @@ App.views = (function () {
           });
         }
 
+        const gewaehlteTags = tagRowBinden();
+
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const pos = selectedPos || { rx: 0.75, ry: 0.5 };
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
           App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, half: currentHalf(minute), rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone,
+            tags: [...gewaehlteTags],
             clockSec: ts.timerSeconds, wallClock: Date.now(),
             ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}) });
           App.ui.closeModal();
           App.ui.toast('Wurf gespeichert', 'ok');
           refreshScore();
+          refreshRecent();
+        });
+      }, 0);
+    }
+
+    /**
+     * Technischer Fehler — ein Ereignis ohne Wurf.
+     *
+     * Bewusst eine eigene, sehr kurze Maske statt eines fuenften
+     * Ergebnis-Knopfes: ein Schrittfehler hat keinen Wurfort, kein Ergebnis
+     * und keine Torzone. Als Wurf gefuehrt wuerde er jede Trefferquote
+     * verfaelschen, weil er den Nenner erhoeht, ohne je ein Tor sein zu
+     * koennen. Beim Gegner wird nur gezaehlt — welcher Gegenspieler den
+     * Ball verliert, sieht man von der Bank ohnehin selten.
+     */
+    function openTurnoverModal(gameId, autoMinute, side = 'own') {
+      const eigene = side === 'own';
+      let selectedPlayerId = null;
+      let selectedKind = null;
+
+      const kaderKomplett = App.data.getPlayers();
+      const kaderHeute    = App.data.getMatchdaySquad(gameId);
+      const players = App.data.hasMatchdaySquad(gameId) && kaderHeute.length > 0
+        ? kaderHeute : kaderKomplett;
+
+      const html = `
+        ${eigene && players.length > 0 ? `
+        <div class="form-group">
+          <label>Spieler <span class="lm-field-hint">optional</span></label>
+          <div class="live-player-grid" id="tv-players">
+            ${playerButtonsHTML(players, getPlayerSort(), gameId)}
+          </div>
+        </div>` : ''}
+        <div class="form-group">
+          <label>Art <span class="lm-field-hint">optional</span></label>
+          <div class="tag-btn-group">
+            ${App.data.TURNOVER_KINDS.map(a =>
+              `<button type="button" class="tag-btn" data-kind="${a.id}">${a.label}</button>`).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Minute</label>
+          <input class="form-control" id="tv-minute" type="number" min="1" max="70" value="${autoMinute || ''}">
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-outline" onclick="App.ui.closeModal()">Abbrechen</button>
+          <button class="btn btn-primary" id="tv-save" style="flex:1;padding:10px;font-size:14px">Speichern</button>
+        </div>`;
+
+      App.ui.openModal(eigene ? 'Technischer Fehler' : 'Technischer Fehler (Gegner)', html);
+      document.getElementById('modal-box').classList.add('modal-matchform');
+
+      setTimeout(() => {
+        document.getElementById('tv-players')?.addEventListener('click', e => {
+          const btn = e.target.closest('[data-pid]');
+          if (!btn) return;
+          const id = parseInt(btn.dataset.pid);
+          // Nochmal antippen hebt die Auswahl auf — der Spieler ist optional,
+          // und ohne Rueckweg waere ein Fehlgriff nicht mehr zu korrigieren.
+          selectedPlayerId = (selectedPlayerId === id) ? null : id;
+          document.querySelectorAll('#tv-players .live-player-btn').forEach(b => b.classList.remove('selected'));
+          if (selectedPlayerId != null) btn.classList.add('selected');
+        });
+
+        document.querySelectorAll('#modal-body .tag-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            selectedKind = (selectedKind === btn.dataset.kind) ? null : btn.dataset.kind;
+            document.querySelectorAll('#modal-body .tag-btn').forEach(b => b.classList.remove('selected'));
+            if (selectedKind) btn.classList.add('selected');
+          });
+        });
+
+        document.getElementById('tv-save')?.addEventListener('click', () => {
+          const minute = parseInt(document.getElementById('tv-minute')?.value) || null;
+          App.data.addTurnover({
+            gameId, side, kind: selectedKind, minute, half: currentHalf(minute),
+            playerId: eigene ? selectedPlayerId : null,
+            clockSec: ts.timerSeconds, wallClock: Date.now(),
+            ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}),
+          });
+          App.ui.closeModal();
+          App.ui.toast('Technischer Fehler gespeichert', 'ok');
           refreshRecent();
         });
       }, 0);
@@ -2083,6 +2236,7 @@ App.views = (function () {
             ${ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
           </div>
         </div>` : ''}
+        ${tagRowHTML()}
         <div class="form-group">
           <label>Minute</label>
           <input class="form-control" id="lm-minute" type="number" min="1" max="70" value="${autoMinute || ''}">
@@ -2130,13 +2284,31 @@ App.views = (function () {
           }
         });
 
-        document.getElementById('btn-add-confirm')?.addEventListener('click', () => {
-          const name = document.getElementById('opp-new-player')?.value.trim();
+        /**
+         * Neu angelegten Gegenspieler sofort auswaehlen.
+         *
+         * Vorher blieb er unmarkiert: wer im Spiel die Nummer eintippt, hat
+         * den Werfer gerade im Kopf und haelt ihn damit fuer gesetzt — der
+         * Wurf wurde dann ohne Spieler gespeichert, und gemerkt hat man es
+         * erst in der Auswertung.
+         */
+        function neuenSpielerUebernehmen() {
+          const feld = document.getElementById('opp-new-player');
+          const name = App.data.addOpponentPlayer(gameId, feld?.value);
           if (!name) return;
-          App.data.addOpponentPlayer(gameId, name);
-          document.getElementById('opp-new-player').value = '';
+          selectedOppPlayer = name;
+          feld.value = '';
           document.getElementById('opp-add-row').style.display = 'none';
           buildRosterChips();
+        }
+
+        document.getElementById('btn-add-confirm')?.addEventListener('click', neuenSpielerUebernehmen);
+
+        // Auf dem iPad liegt die Eingabetaste naeher als der OK-Knopf.
+        document.getElementById('opp-new-player')?.addEventListener('keydown', e => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          neuenSpielerUebernehmen();
         });
 
         if (!presetOutcome) {
@@ -2159,11 +2331,14 @@ App.views = (function () {
           });
         }
 
+        const gegnerTags = tagRowBinden();
+
         document.getElementById('lm-save')?.addEventListener('click', () => {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
           const pos = selectedOppPos || { rx: 0.25, ry: 0.5 };
           App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, half: currentHalf(minute), rx: pos.rx, ry: pos.ry, position: selectedOppPosition, goalZone: selectedZone,
+            tags: [...gegnerTags],
             clockSec: ts.timerSeconds, wallClock: Date.now(),
             ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}) });
           if (selectedOutcome === 'goal') {
