@@ -8,7 +8,7 @@
  * sonst bekommen installierte Geräte die alte Fassung weiter ausgeliefert.
  */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `hb-app-${CACHE_VERSION}`;
 
 // Relative Pfade, damit es unter GitHub Pages im Unterordner genauso läuft wie lokal.
@@ -59,6 +59,31 @@ self.addEventListener('activate', event => {
   );
 });
 
+/* Wie lange auf das Netz gewartet wird, bevor der Cache einspringt.
+   In einer Halle mit schwachem WLAN darf der Start nicht daran haengen. */
+const NETZ_FRIST_MS = 3000;
+
+function ausNetzMitFrist(req) {
+  return new Promise((resolve, reject) => {
+    const uhr = setTimeout(() => reject(new Error('Zeitueberschreitung')), NETZ_FRIST_MS);
+    fetch(req).then(
+      res => { clearTimeout(uhr); resolve(res); },
+      err => { clearTimeout(uhr); reject(err); }
+    );
+  });
+}
+
+/* ERST NETZ, dann Cache — fuer ALLES, nicht nur fuer Navigationen.
+ *
+ * Vorher war es umgekehrt: die Seite kam frisch, JS und CSS aber aus dem
+ * Cache. Auf dem Homescreen-Symbol lief dadurch dauerhaft eine veraltete
+ * Fassung, im besten Fall immer genau einen Start hinterher — im
+ * schlechtesten beliebig lange, wenn das Nachladen im Hintergrund nie
+ * durchkam. Fuer eine App, mit der ein laufendes Spiel erfasst wird, ist
+ * das die gefaehrlichere Seite des Kompromisses: lieber drei Sekunden auf
+ * das Netz warten als mit altem Stand ins Spiel gehen.
+ *
+ * Offline bleibt es voll benutzbar — dann greift der Cache sofort. */
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
@@ -66,31 +91,22 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // z.B. OpenLigaDB — nie cachen
 
-  // Navigationen: erst Netz (damit Updates ankommen), bei Ausfall die gecachte Seite.
-  if (req.mode === 'navigate') {
-    event.respondWith(
-      fetch(req)
-        .then(res => {
-          const kopie = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put('./index.html', kopie));
-          return res;
-        })
-        .catch(() => caches.match('./index.html'))
-    );
-    return;
-  }
+  const istNavigation = req.mode === 'navigate';
+  const cacheSchluessel = istNavigation ? './index.html' : req;
 
-  // Alles andere: erst Cache (schnell und offline), im Hintergrund nachladen.
   event.respondWith(
-    caches.match(req).then(treffer => {
-      const ausNetz = fetch(req).then(res => {
+    ausNetzMitFrist(req)
+      .then(res => {
         if (res && res.status === 200 && res.type === 'basic') {
           const kopie = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(req, kopie));
+          caches.open(CACHE_NAME).then(c => c.put(cacheSchluessel, kopie));
         }
         return res;
-      }).catch(() => treffer);
-      return treffer || ausNetz;
-    })
+      })
+      .catch(() => caches.match(cacheSchluessel).then(treffer =>
+        treffer || new Response('Offline und nicht im Zwischenspeicher', {
+          status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        })
+      ))
   );
 });

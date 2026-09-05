@@ -493,6 +493,31 @@ App.ui = (function () {
             toast('Einstellungen gespeichert', 'ok');
           });
 
+          // Nach einer neuen Fassung suchen. Meldet ehrlich zurueck, ob eine
+          // gefunden wurde — ein blosses "fertig" liesse offen, ob wirklich
+          // etwas geprueft wurde.
+          document.getElementById('btn-check-update')?.addEventListener('click', async () => {
+            const status = document.getElementById('update-status');
+            if (!('serviceWorker' in navigator)) {
+              if (status) status.textContent = 'In diesem Browser nicht verfügbar';
+              return;
+            }
+            if (status) status.textContent = 'Suche…';
+            try {
+              const reg = await navigator.serviceWorker.getRegistration();
+              if (!reg) { if (status) status.textContent = 'Nicht als App installiert'; return; }
+              await reg.update();
+              if (reg.installing || reg.waiting) {
+                if (status) status.textContent = 'Neue Fassung gefunden — wird geladen…';
+                // controllerchange in index.html laedt anschliessend neu.
+              } else if (status) {
+                status.textContent = 'Du bist auf dem neuesten Stand';
+              }
+            } catch (err) {
+              if (status) status.textContent = 'Keine Verbindung — später nochmal';
+            }
+          });
+
           // Datensicherung: Export als JSON-Download
           document.getElementById('btn-export-data')?.addEventListener('click', () => {
             const blob = new Blob([App.data.exportJSON()], { type: 'application/json' });

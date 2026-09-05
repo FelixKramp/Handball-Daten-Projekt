@@ -149,7 +149,22 @@ finish review, the verdict, and DESIGN.md
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js')
+        .then(reg => {
+          // Bei jedem Start nach einer neuen Fassung sehen. Ohne das merkt
+          // ein Geraet, das nur ueber das Homescreen-Symbol geoeffnet wird,
+          // eine Aktualisierung oft tagelang nicht.
+          reg.update().catch(() => {});
+        })
         .catch(err => console.warn('Service Worker nicht registriert:', err));
+
+      // Uebernimmt eine neue Fassung, einmal neu laden, damit Seite und Code
+      // zusammenpassen. Das Flag verhindert eine Schleife.
+      let neugeladen = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (neugeladen) return;
+        neugeladen = true;
+        location.reload();
+      });
     });
   }
 </script>

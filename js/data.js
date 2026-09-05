@@ -467,6 +467,46 @@ App.data = (function () {
       persist(state);
     },
 
+    setOpponentRoster(gameId, names) {
+      const g = state.games.find(g => g.id === gameId);
+      if (!g) return null;
+      // Leeres verwerfen und Dubletten zusammenfassen — Nummern werden
+      // haeufig in einem Rutsch eingetippt, da verrutscht schnell etwas.
+      const sauber = [];
+      names.map(n => String(n).trim()).filter(Boolean).forEach(n => {
+        if (!sauber.some(x => x.toLowerCase() === n.toLowerCase())) sauber.push(n);
+      });
+      g.opponentRoster = sauber;
+      persist(state);
+      return g.opponentRoster;
+    },
+
+    /**
+     * Vorschlag fuer den Gegner-Kader. Anders als beim eigenen Kader zaehlt
+     * hier nicht das letzte Spiel, sondern das letzte gegen DENSELBEN Gegner:
+     * im Rueckspiel traegt die Mannschaft dieselben Nummern.
+     * Sonst das, was in diesem Spiel schon an Werfern vorkam.
+     */
+    suggestOpponentRoster(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return [];
+
+      const frueher = state.games
+        .filter(g => g.id !== gameId
+                  && String(g.opponent).trim().toLowerCase() === String(game.opponent).trim().toLowerCase()
+                  && Array.isArray(g.opponentRoster) && g.opponentRoster.length > 0
+                  && g.date && g.date <= game.date)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+      if (frueher) return [...frueher.opponentRoster];
+
+      const ausWuerfen = [];
+      this.getOpponentShots(gameId).forEach(s => {
+        const n = (s.opponentPlayer || '').trim();
+        if (n && !ausWuerfen.includes(n)) ausWuerfen.push(n);
+      });
+      return ausWuerfen;
+    },
+
     // ── Live Score ────────────────────────────────────────
     getLiveGoalsAgainst(gameId) {
       const g = state.games.find(g => g.id === gameId);

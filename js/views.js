@@ -947,6 +947,17 @@ App.views = (function () {
         </div>
       </div>
       <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px;">
+        <div class="card-title" style="margin-bottom:6px">App-Version</div>
+        <p class="text-muted" style="font-size:12px;margin:0 0 10px">
+          Die App lädt beim Start selbst die neueste Fassung. Wenn du sicher gehen
+          willst — etwa kurz vor einem Spiel — kannst du hier nachsehen.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-outline" id="btn-check-update" type="button">Nach Update suchen</button>
+          <span class="text-muted" style="font-size:12px" id="update-status"></span>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px;">
         <div class="card-title" style="margin-bottom:6px">Datensicherung</div>
         <p class="text-muted" style="font-size:12px;margin:0 0 12px">
           Alle Daten liegen nur in diesem Browser. Lade regelmäßig eine Sicherung herunter —
@@ -997,6 +1008,7 @@ App.views = (function () {
           </select>
           <button class="btn btn-outline btn-sm" id="btn-matchday-squad" type="button">Spieltagskader</button>
           <button class="btn btn-outline btn-sm" id="btn-starters" type="button">Start 7</button>
+          <button class="btn btn-outline btn-sm" id="btn-opp-roster" type="button">Gegner-Kader</button>
           <button class="btn btn-primary btn-sm" id="btn-finish-game" type="button">Spiel speichern</button>
         </div>
 
@@ -1349,6 +1361,10 @@ App.views = (function () {
       const starter = App.data.getStarters(currentGameId).length;
       markiere(document.getElementById('btn-starters'), starter > 0,
                starter > 0 ? `Start 7 (${starter})` : 'Start 7');
+
+      const gegner = App.data.getOpponentRoster(currentGameId).length;
+      markiere(document.getElementById('btn-opp-roster'), gegner > 0,
+               gegner > 0 ? `Gegner-Kader (${gegner})` : 'Gegner-Kader');
     }
     refreshSquadButton();
 
@@ -1358,6 +1374,10 @@ App.views = (function () {
 
     document.getElementById('btn-starters')?.addEventListener('click', () => {
       openStartersModal(currentGameId, refreshSquadButton);
+    });
+
+    document.getElementById('btn-opp-roster')?.addEventListener('click', () => {
+      openOpponentRosterModal(currentGameId, refreshSquadButton);
     });
 
     // ── Spiel abschließen ──────────────────────────────────────────
@@ -1619,6 +1639,89 @@ App.views = (function () {
           if (onSave) onSave();
         },
       });
+    }
+
+    /**
+     * Gegner-Kader vor dem Spiel anlegen. Bisher ging das nur mitten im
+     * Erfassen: erst „Tor", dann „Hinzufügen" — jede Nummer einzeln,
+     * während das Spiel läuft.
+     *
+     * Man tippt die Nummern hier in einem Rutsch ein („3 7 12 19"), so wie
+     * man sie vom Spielberichtsbogen abliest.
+     */
+    function openOpponentRosterModal(gameId, onSave) {
+      const game = App.data.getGames().find(g => g.id === gameId);
+      if (!game) return;
+
+      const vorhanden = App.data.getOpponentRoster(gameId);
+      let liste = vorhanden.length > 0 ? [...vorhanden] : App.data.suggestOpponentRoster(gameId);
+      const uebernommen = vorhanden.length === 0 && liste.length > 0;
+
+      App.ui.openModal(`Gegner-Kader — ${game.opponent}`, `
+        <p class="text-muted" style="font-size:12.5px;margin:-4px 0 12px">
+          Nummern oder Namen, durch Leerzeichen oder Komma getrennt. Sie stehen
+          dann beim Eintragen eines Gegner-Wurfs sofort bereit.
+          ${uebernommen ? '<br><strong>Aus dem letzten Spiel gegen diesen Gegner übernommen.</strong>' : ''}
+        </p>
+        <div class="opp-add-row" style="display:flex">
+          <input class="form-control" id="or-input" placeholder="z.B. 3 7 12 19" style="flex:1">
+          <button class="btn btn-primary" id="or-add" type="button">Hinzufügen</button>
+        </div>
+        <div class="or-chips" id="or-chips"></div>
+        <div class="form-actions">
+          <button class="btn btn-outline" onclick="App.ui.closeModal()">Abbrechen</button>
+          <button class="btn btn-primary" id="or-save">Übernehmen</button>
+        </div>`);
+
+      setTimeout(() => {
+        const chips = document.getElementById('or-chips');
+        const feld  = document.getElementById('or-input');
+
+        function zeichne() {
+          chips.innerHTML = liste.length === 0
+            ? '<div class="text-muted" style="padding:14px 0">Noch niemand eingetragen</div>'
+            : liste.map((n, i) => `
+                <button type="button" class="or-chip" data-idx="${i}" title="Entfernen">
+                  ${n}<span class="or-chip-x">×</span>
+                </button>`).join('');
+        }
+        zeichne();
+
+        function hinzufuegen() {
+          // Leerzeichen, Komma und Semikolon trennen — je nachdem, wie man tippt.
+          const neu = feld.value.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+          if (neu.length === 0) return;
+          neu.forEach(n => {
+            if (!liste.some(x => x.toLowerCase() === n.toLowerCase())) liste.push(n);
+          });
+          feld.value = '';
+          zeichne();
+          feld.focus();
+        }
+
+        document.getElementById('or-add').addEventListener('click', hinzufuegen);
+        feld.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); hinzufuegen(); }
+        });
+
+        chips.addEventListener('click', e => {
+          const chip = e.target.closest('.or-chip');
+          if (!chip) return;
+          liste.splice(parseInt(chip.dataset.idx), 1);
+          zeichne();
+        });
+
+        document.getElementById('or-save').addEventListener('click', () => {
+          // Noch nicht bestaetigte Eingabe nicht verlieren.
+          if (feld.value.trim()) hinzufuegen();
+          App.data.setOpponentRoster(gameId, liste);
+          App.ui.closeModal();
+          App.ui.toast(`Gegner-Kader: ${liste.length} Werfer`, 'ok');
+          if (onSave) onSave();
+        });
+
+        feld.focus();
+      }, 0);
     }
 
     /** Anfangsformation. Bestimmt nur die Reihenfolge, filtert nichts weg. */

@@ -1758,3 +1758,29 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover { background: var(--row-hover); }
+
+/* Gegner-Kader: eingetragene Werfer als entfernbare Marken */
+.or-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  min-height: 40px;
+}
+.or-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.or-chip:hover { border-color: var(--accent); color: var(--accent); }
+.or-chip-x { color: var(--text-3); font-weight: 400; }
+.or-chip:hover .or-chip-x { color: var(--accent); }
