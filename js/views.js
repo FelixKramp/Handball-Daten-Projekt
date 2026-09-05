@@ -230,27 +230,42 @@ App.views = (function () {
   // ── Spielanalyse ─────────────────────────────────────────────────
 
   function renderAnalysis(el) {
-    const games = App.data.getGames().filter(g => g.played);
+    // Auch laufende Spiele, sobald Wuerfe drin stehen — sonst muesste man
+    // bis zum Schlusspfiff warten, um in die Auswertung zu schauen.
+    const games = App.data.getAnalysableGames();
 
     if (games.length === 0) {
-      el.innerHTML = `<div class="empty"><h3>Keine gespielten Spiele</h3>
-        <p>Trage zuerst Spielergebnisse im Spielplan ein.</p></div>`;
+      el.innerHTML = `<div class="empty"><h3>Noch nichts auszuwerten</h3>
+        <p>Erfasse im Spielmodus Würfe oder trage im Spielplan ein Ergebnis ein.</p></div>`;
       return;
     }
 
+    /** Beschriftung im Auswahlfeld — laufende Spiele mit Zwischenstand. */
+    function gameLabel(g) {
+      if (g.played) return `${dateFmt(g.date)} – ${g.opponent} (${g.goalsFor}:${g.goalsAgainst})`;
+      const live = App.data.getLiveScore(g.id);
+      return `${dateFmt(g.date)} – ${g.opponent} · läuft (${live.own}:${live.opp})`;
+    }
+
     let activeGameId = games[0].id;
-    let mode = 'own'; // 'own' | 'opp' | 'momentum'
+    let mode = 'own';   // 'own' | 'opp' | 'momentum'
+    let half = null;    // null = ganzes Spiel, sonst 1 oder 2
 
     el.innerHTML = `
       <div class="section">
         <div class="court-controls" style="margin-bottom:16px;">
-          <select class="form-control" id="analysis-game-select" style="max-width:260px;">
-            ${games.map(g => `<option value="${g.id}">${dateFmt(g.date)} – ${g.opponent} (${g.goalsFor}:${g.goalsAgainst})</option>`).join('')}
+          <select class="form-control" id="analysis-game-select" style="max-width:300px;">
+            ${games.map(g => `<option value="${g.id}">${gameLabel(g)}</option>`).join('')}
           </select>
           <div class="seg-control" id="analysis-mode">
             <button class="seg-btn active" data-mode="own">Eigene Würfe</button>
             <button class="seg-btn" data-mode="opp">Gegner-Würfe</button>
             <button class="seg-btn" data-mode="momentum">Momentum</button>
+          </div>
+          <div class="seg-control" id="analysis-half">
+            <button class="seg-btn active" data-half="">Ganzes Spiel</button>
+            <button class="seg-btn" data-half="1">1. HZ</button>
+            <button class="seg-btn" data-half="2">2. HZ</button>
           </div>
         </div>
         <div class="live-video-panel" id="an-video-panel">
@@ -362,8 +377,8 @@ App.views = (function () {
         if (!marker || !App.video.isLoaded()) return;
         const id = parseInt(marker.dataset.id);
         const liste = marker.classList.contains('opp-shot-marker')
-          ? App.data.getOpponentShots(activeGameId)
-          : App.data.getShots(activeGameId);
+          ? App.data.getOpponentShots(activeGameId, half)
+          : App.data.getShots(activeGameId, half);
         const shot = liste.find(s => s.id === id);
         if (!shot || shot.videoTime == null) {
           App.ui.toast('Zu diesem Wurf wurde keine Videoposition erfasst', 'inf');
@@ -377,10 +392,10 @@ App.views = (function () {
 
       function refresh() {
         if (isOwn) {
-          App.court.renderShots(courtSvg, App.data.getShots(activeGameId), App.data.getPlayers());
+          App.court.renderShots(courtSvg, App.data.getShots(activeGameId, half), App.data.getPlayers());
         } else {
           App.court.renderShots(courtSvg, [], []);
-          App.court.renderOpponentShots(courtSvg, App.data.getOpponentShots(activeGameId));
+          App.court.renderOpponentShots(courtSvg, App.data.getOpponentShots(activeGameId, half));
         }
         renderStats();
         renderSecondary();
@@ -394,7 +409,7 @@ App.views = (function () {
       }
 
       function renderStats() {
-        const s = isOwn ? App.data.getShotStats(activeGameId) : App.data.getOpponentShotStats(activeGameId);
+        const s = isOwn ? App.data.getShotStats(activeGameId, half) : App.data.getOpponentShotStats(activeGameId, half);
         const pct = s.total > 0 ? Math.round(s.goals / s.total * 100) : 0;
         document.getElementById('shot-stats-content').innerHTML = `
           <div class="stat-row" style="margin-bottom:16px;">
@@ -415,7 +430,7 @@ App.views = (function () {
         if (isOwn) {
           // Player goals chart
           const pGoals = {};
-          App.data.getShots(activeGameId).filter(s => s.outcome === 'goal').forEach(s => {
+          App.data.getShots(activeGameId, half).filter(s => s.outcome === 'goal').forEach(s => {
             pGoals[s.playerId] = (pGoals[s.playerId] || 0) + 1;
           });
           const players = App.data.getPlayers();
@@ -447,7 +462,7 @@ App.views = (function () {
           }
         } else {
           // Goal-zone heatmap (goalkeeper analysis)
-          const gz = App.data.getGoalZoneStats(activeGameId, 'opp');
+          const gz = App.data.getGoalZoneStats(activeGameId, 'opp', half);
           host.className = '';
           if (gz.total === 0) {
             host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine Gegner-Tore mit Torzone erfasst.<br>Trage Gegner-Würfe mit Torzone ein (Spielmodus → Abwehr).</div>';
@@ -461,7 +476,7 @@ App.views = (function () {
       function renderOwnGoalZone() {
         const host = document.getElementById('own-goalzone-panel');
         if (!host) return;
-        const gz = App.data.getGoalZoneStats(activeGameId, 'own');
+        const gz = App.data.getGoalZoneStats(activeGameId, 'own', half);
         if (gz.total === 0) {
           host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine eigenen Tore mit Torzone erfasst.<br>Trage Würfe im Spielmodus mit Torzone ein.</div>';
         } else {
@@ -483,10 +498,13 @@ App.views = (function () {
 
       // Clear
       document.getElementById('btn-clear-shots').addEventListener('click', function () {
-        const shots = isOwn ? App.data.getShots(activeGameId) : App.data.getOpponentShots(activeGameId);
+        // Nur die gerade sichtbaren Wuerfe: bei aktivem Halbzeit-Filter
+        // waere ein Loeschen ueber das ganze Spiel eine boese Ueberraschung.
+        const shots = isOwn ? App.data.getShots(activeGameId, half) : App.data.getOpponentShots(activeGameId, half);
         if (shots.length === 0) return;
+        const bereich = half ? ` aus der ${half}. Halbzeit` : ' für dieses Spiel';
         App.ui.askConfirm(
-          `Alle ${shots.length} ${isOwn ? '' : 'Gegner-'}Würfe für dieses Spiel löschen?`
+          `Alle ${shots.length} ${isOwn ? '' : 'Gegner-'}Würfe${bereich} löschen?`
         ).then(ja => {
           if (!ja) return;
           shots.forEach(s => isOwn ? App.data.deleteShot(s.id) : App.data.deleteOpponentShot(s.id));
@@ -498,9 +516,9 @@ App.views = (function () {
 
     // ── Momentum ─────────────────────────────────────────────────────
     function renderMomentum() {
-      const m   = App.data.getMomentumData(activeGameId);
-      const run = App.data.getCurrentRun(activeGameId);
-      const hot = App.data.getHotPlayer(activeGameId, 10);
+      const m   = App.data.getMomentumData(activeGameId, half);
+      const run = App.data.getCurrentRun(activeGameId, half);
+      const hot = App.data.getHotPlayer(activeGameId, 10, half);
 
       let runHtml;
       if (run.side === null) {
@@ -575,6 +593,12 @@ App.views = (function () {
 
     document.getElementById('analysis-game-select').addEventListener('change', function () {
       activeGameId = parseInt(this.value);
+      // Zwischenstaende nachziehen: bei laufenden Spielen ist die Beschriftung
+      // schon veraltet, sobald nebenher ein Tor erfasst wurde.
+      this.querySelectorAll('option').forEach(opt => {
+        const g = games.find(g => g.id === parseInt(opt.value));
+        if (g) opt.textContent = gameLabel(g);
+      });
       render();
       ladeVideoFuerSpiel();
     });
@@ -584,6 +608,17 @@ App.views = (function () {
       if (!btn || btn.dataset.mode === mode) return;
       mode = btn.dataset.mode;
       this.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+      render();
+    });
+
+    document.getElementById('analysis-half').addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-half]');
+      if (!btn) return;
+      const gewaehlt = parseInt(btn.dataset.half) || null;
+      if (gewaehlt === half) return;
+      half = gewaehlt;
+      this.querySelectorAll('.seg-btn').forEach(b =>
+        b.classList.toggle('active', (parseInt(b.dataset.half) || null) === half));
       render();
     });
   }
@@ -829,11 +864,26 @@ App.views = (function () {
     const ts = App.live;
 
     // Beim Auswerten einer Aufnahme ist die Videoposition die verlässlichere Quelle
-    // für die Spielminute — der Live-Timer läuft dabei gar nicht mit.
+    // für die Spielminute — der Live-Timer läuft dabei gar nicht mit. Sie zählt
+    // ab Anpfiff ohnehin durch, braucht also keinen Halbzeit-Zuschlag.
     function currentMinute() {
       const ausVideo = App.video.currentMinute();
       if (ausVideo != null) return ausVideo;
-      return ts.timerSeconds > 0 ? Math.max(1, Math.ceil(ts.timerSeconds / 60)) : null;
+      if (ts.timerSeconds <= 0) return null;
+      // Der Timer beginnt zur Pause wieder bei 0. Für eine durchgehende
+      // Spielminute (2. HZ ab 31.) die erste Halbzeit dazurechnen.
+      const vorlauf = (ts.timerHalf - 1) * App.data.HALF_MINUTES;
+      return vorlauf + Math.max(1, Math.ceil(ts.timerSeconds / 60));
+    }
+
+    /**
+     * Halbzeit, in die ein Eintrag gehört. Steht eine Minute fest, ergibt
+     * sich die Halbzeit daraus — das passt auch beim Auswerten per Video,
+     * wo der Halbzeit-Schalter nicht mitläuft. Ohne Minute zählt er.
+     */
+    function currentHalf(minute) {
+      if (minute != null) return minute > App.data.HALF_MINUTES ? 2 : 1;
+      return ts.timerHalf;
     }
 
     // Kurzer "Stempel"-Effekt beim Zahlenwechsel — Klasse neu antriggern statt nur
@@ -846,8 +896,7 @@ App.views = (function () {
     }
 
     function refreshScore() {
-      const ownGoals = App.data.getShots(currentGameId).filter(s => s.outcome === 'goal').length;
-      const oppGoals = App.data.getLiveGoalsAgainst(currentGameId);
+      const { own: ownGoals, opp: oppGoals } = App.data.getLiveScore(currentGameId);
       const ownEl = document.getElementById('live-score-own');
       const oppEl = document.getElementById('live-score-opp');
       if (ownEl && ownEl.textContent !== String(ownGoals)) { ownEl.textContent = ownGoals; popNumber(ownEl); }
@@ -997,7 +1046,14 @@ App.views = (function () {
       if (t)   t.textContent   = fmtTime(ts.timerSeconds);
       if (btn) btn.textContent = ts.timerRunning ? '⏸' : '▶';
       if (hz)  hz.textContent  = ts.timerHalf + '. HZ';
-      if (hz2) hz2.style.display = ts.timerHalf === 1 ? '' : 'none';
+      // Der Knopf schaltet auf die jeweils andere Halbzeit. Er verschwindet
+      // bewusst nicht: ein Fehlgriff wäre sonst nicht mehr zu korrigieren,
+      // und alle danach erfassten Würfe lägen in der falschen Halbzeit.
+      if (hz2) {
+        const ziel = ts.timerHalf === 1 ? 2 : 1;
+        hz2.textContent = ziel + '. HZ';
+        hz2.title = ziel === 2 ? '2. Halbzeit starten' : 'Zurück zur 1. Halbzeit';
+      }
     }
 
     function startTimer() {
@@ -1008,6 +1064,10 @@ App.views = (function () {
         if (t) t.textContent = fmtTime(ts.timerSeconds);
       }, 1000);
     }
+
+    // Die Halbzeit gehört zum Spiel, nicht zur Sitzung — sonst stünde nach
+    // einem Spielwechsel die 2. HZ des vorigen Spiels im Schalter.
+    ts.timerHalf = App.data.getLiveHalf(currentGameId);
 
     if (ts.timerRunning && !ts.timerInterval) startTimer();
     updateTimerUI();
@@ -1025,8 +1085,11 @@ App.views = (function () {
       clearInterval(ts.timerInterval);
       ts.timerInterval = null;
       ts.timerRunning  = false;
-      ts.timerSeconds  = 0;
-      ts.timerHalf     = 2;
+      ts.timerHalf     = ts.timerHalf === 1 ? 2 : 1;
+      // Die 2. Halbzeit fängt bei 0:00 an. Der Weg zurück ist eine Korrektur
+      // eines Fehlgriffs — da bleibt die Uhr stehen, wo sie steht.
+      if (ts.timerHalf === 2) ts.timerSeconds = 0;
+      App.data.setLiveHalf(currentGameId, ts.timerHalf);
       updateTimerUI();
     });
 
@@ -1057,6 +1120,8 @@ App.views = (function () {
     // ── Game select ────────────────────────────────────────────────
     document.getElementById('live-game-select').addEventListener('change', function () {
       currentGameId = parseInt(this.value);
+      ts.timerHalf = App.data.getLiveHalf(currentGameId);
+      updateTimerUI();
       refreshScore();
       refreshRecent();
       refreshSquadButton();
@@ -1296,7 +1361,7 @@ App.views = (function () {
           </div>` : ''}
           <div class="form-group">
             <label>Minute</label>
-            <input class="form-control" id="lm-minute" type="number" min="1" max="60" value="${autoMinute || ''}">
+            <input class="form-control" id="lm-minute" type="number" min="1" max="70" value="${autoMinute || ''}">
           </div>
         </div>
         <div class="form-actions">
@@ -1401,7 +1466,7 @@ App.views = (function () {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const pos = selectedPos || { rx: 0.75, ry: 0.5 };
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
-          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone,
+          App.data.addShot({ gameId, playerId: selectedPlayerId, outcome: selectedOutcome, minute, half: currentHalf(minute), rx: pos.rx, ry: pos.ry, position: selectedPosition, goalZone: selectedGoalZone,
             clockSec: ts.timerSeconds, wallClock: Date.now(),
             ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}) });
           App.ui.closeModal();
@@ -1460,7 +1525,7 @@ App.views = (function () {
         </div>` : ''}
         <div class="form-group">
           <label>Minute</label>
-          <input class="form-control" id="lm-minute" type="number" min="1" max="60" value="${autoMinute || ''}">
+          <input class="form-control" id="lm-minute" type="number" min="1" max="70" value="${autoMinute || ''}">
         </div>
         <div class="form-actions">
           <button class="btn btn-outline" onclick="App.ui.closeModal()">Abbrechen</button>
@@ -1538,7 +1603,7 @@ App.views = (function () {
           if (!selectedOutcome) { App.ui.toast('Bitte Ergebnis wählen', 'err'); return; }
           const minute = parseInt(document.getElementById('lm-minute')?.value) || null;
           const pos = selectedOppPos || { rx: 0.25, ry: 0.5 };
-          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, rx: pos.rx, ry: pos.ry, position: selectedOppPosition, goalZone: selectedZone,
+          App.data.addOpponentShot({ gameId, opponentPlayer: selectedOppPlayer, outcome: selectedOutcome, minute, half: currentHalf(minute), rx: pos.rx, ry: pos.ry, position: selectedOppPosition, goalZone: selectedZone,
             clockSec: ts.timerSeconds, wallClock: Date.now(),
             ...(App.video.isLoaded() ? { videoTime: App.video.getCurrentTime() } : {}) });
           if (selectedOutcome === 'goal') {

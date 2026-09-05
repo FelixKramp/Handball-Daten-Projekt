@@ -40,6 +40,31 @@ App.data = (function () {
     return id;
   }
 
+  // ── Halbzeiten ──────────────────────────────────────────────────
+  //
+  // Spielminuten laufen durch: die 2. Halbzeit beginnt bei Minute 31.
+  // Der Live-Timer startet zur Pause zwar wieder bei 0, rechnet die erste
+  // Halbzeit beim Speichern aber dazu.
+
+  const HALF_MINUTES = 30;
+
+  /**
+   * Halbzeit eines Eintrags. Ist sie mitgespeichert, gilt sie; sonst wird
+   * sie aus der Minute abgeleitet — so bleiben Altdaten und von Hand
+   * nachgetragene Wuerfe einsortierbar. Ohne beides zaehlt der Eintrag zur
+   * ersten Halbzeit.
+   */
+  function halfOf(shot) {
+    if (shot.half === 1 || shot.half === 2) return shot.half;
+    return (shot.minute != null && shot.minute > HALF_MINUTES) ? 2 : 1;
+  }
+
+  /** half === 1|2 filtert, alles andere (undefined, 'all') laesst durch. */
+  function byHalf(shots, half) {
+    if (half !== 1 && half !== 2) return shots;
+    return shots.filter(s => halfOf(s) === half);
+  }
+
   const api = {
     // ── Team ─────────────────────────────────────────────
     getTeam()       { return { ...state.team }; },
@@ -116,6 +141,29 @@ App.data = (function () {
       return [...state.games].sort((a, b) => new Date(b.date) - new Date(a.date));
     },
     getGame(id) { return state.games.find(g => g.id === id) || null; },
+
+    /**
+     * Spiele, fuer die es etwas auszuwerten gibt: abgeschlossene und solche,
+     * in denen schon Wuerfe erfasst sind. Damit laesst sich ein laufendes
+     * Spiel bereits zur Halbzeit analysieren, statt bis zur Ergebnis-
+     * eingabe zu warten.
+     *
+     * Laufende Spiele stehen vorn — waehrend des Spiels will man genau die
+     * sehen, nicht das Ergebnis von letzter Woche.
+     */
+    getAnalysableGames() {
+      const mitDaten = new Set([
+        ...state.shots.map(s => s.gameId),
+        ...state.opponentShots.map(s => s.gameId),
+      ]);
+      const laeuft = g => !g.played;
+      return state.games
+        .filter(g => g.played || mitDaten.has(g.id))
+        .sort((a, b) => {
+          if (laeuft(a) !== laeuft(b)) return laeuft(a) ? -1 : 1;
+          return new Date(b.date) - new Date(a.date);
+        });
+    },
 
     addGame(data) {
       const g = { id: nextId('game'), played: false, goalsFor: null, goalsAgainst: null, ...data };
@@ -210,10 +258,15 @@ App.data = (function () {
     },
 
     // ── Shots ─────────────────────────────────────────────
-    getShots(gameId) {
-      return gameId != null
+    //
+    // half ist ueberall optional: 1 oder 2 grenzt auf eine Halbzeit ein,
+    // ohne Angabe zaehlt das ganze Spiel. Bestehende Aufrufe bleiben
+    // dadurch unveraendert.
+    getShots(gameId, half) {
+      const shots = gameId != null
         ? state.shots.filter(s => s.gameId === gameId)
         : [...state.shots];
+      return byHalf(shots, half);
     },
 
     addShot(data) {
@@ -251,8 +304,8 @@ App.data = (function () {
       return player ? { player, goals: tally[topId] } : null;
     },
 
-    getShotStats(gameId) {
-      const shots = this.getShots(gameId);
+    getShotStats(gameId, half) {
+      const shots = this.getShots(gameId, half);
       return {
         total:  shots.length,
         goals:  shots.filter(s => s.outcome === 'goal').length,
@@ -270,10 +323,11 @@ App.data = (function () {
     },
 
     // ── Opponent Shots ────────────────────────────────────
-    getOpponentShots(gameId) {
-      return gameId != null
+    getOpponentShots(gameId, half) {
+      const shots = gameId != null
         ? state.opponentShots.filter(s => s.gameId === gameId)
         : [...state.opponentShots];
+      return byHalf(shots, half);
     },
 
     addOpponentShot(data) {
@@ -288,8 +342,8 @@ App.data = (function () {
       persist(state);
     },
 
-    getOpponentShotStats(gameId) {
-      const shots = this.getOpponentShots(gameId);
+    getOpponentShotStats(gameId, half) {
+      const shots = this.getOpponentShots(gameId, half);
       return {
         total:  shots.length,
         goals:  shots.filter(s => s.outcome === 'goal').length,
@@ -302,8 +356,8 @@ App.data = (function () {
     // ── Analyse: Torzonen / Momentum ──────────────────────
     // Goal-zone tally for goalkeeper analysis.
     // side: 'own' counts our shots, 'opp' counts opponent shots. Only goals are counted.
-    getGoalZoneStats(gameId, side = 'opp') {
-      const shots = side === 'own' ? this.getShots(gameId) : this.getOpponentShots(gameId);
+    getGoalZoneStats(gameId, side = 'opp', half) {
+      const shots = side === 'own' ? this.getShots(gameId, half) : this.getOpponentShots(gameId, half);
       const zones = { tl:0, tm:0, tr:0, ml:0, mm:0, mr:0, bl:0, bm:0, br:0 };
       let withZone = 0;
       shots.filter(s => s.outcome === 'goal' && s.goalZone).forEach(s => {
@@ -313,8 +367,8 @@ App.data = (function () {
     },
 
     // Minute-by-minute momentum timeline: cumulative goals for both sides + running diff.
-    getMomentumData(gameId) {
-      const goals = this._goalTimeline(gameId);
+    getMomentumData(gameId, half) {
+      const goals = this._goalTimeline(gameId, half);
       let own = 0, opp = 0;
       return goals.map(g => {
         if (g.side === 'own') own++; else opp++;
@@ -323,8 +377,8 @@ App.data = (function () {
     },
 
     // Current scoring run: consecutive goals by one side at the end. { side, count }.
-    getCurrentRun(gameId) {
-      const goals = this._goalTimeline(gameId);
+    getCurrentRun(gameId, half) {
+      const goals = this._goalTimeline(gameId, half);
       if (goals.length === 0) return { side: null, count: 0 };
       const lastSide = goals[goals.length - 1].side;
       let count = 0;
@@ -335,8 +389,8 @@ App.data = (function () {
     },
 
     // Hottest own player by goals within the last `windowMin` minutes of recorded play.
-    getHotPlayer(gameId, windowMin = 10) {
-      const shots = this.getShots(gameId).filter(s => s.outcome === 'goal' && s.minute != null);
+    getHotPlayer(gameId, windowMin = 10, half) {
+      const shots = this.getShots(gameId, half).filter(s => s.outcome === 'goal' && s.minute != null);
       if (shots.length === 0) return null;
       const maxMinute = Math.max(...shots.map(s => s.minute));
       const from = maxMinute - windowMin;
@@ -351,12 +405,12 @@ App.data = (function () {
     },
 
     // Merged, minute-sorted list of all scored goals in a game. [{ minute, side }]
-    _goalTimeline(gameId) {
+    _goalTimeline(gameId, half) {
       const goals = [];
-      this.getShots(gameId)
+      this.getShots(gameId, half)
         .filter(s => s.outcome === 'goal' && s.minute != null)
         .forEach(s => goals.push({ minute: s.minute, side: 'own' }));
-      this.getOpponentShots(gameId)
+      this.getOpponentShots(gameId, half)
         .filter(s => s.outcome === 'goal' && s.minute != null)
         .forEach(s => goals.push({ minute: s.minute, side: 'opp' }));
       return goals.sort((a, b) => a.minute - b.minute);
@@ -383,6 +437,35 @@ App.data = (function () {
     },
 
     // ── Live Score ────────────────────────────────────────
+
+    /**
+     * Aktueller Stand eines noch nicht abgeschlossenen Spiels: eigene Tore
+     * aus den erfassten Wuerfen, Gegentore aus dem Live-Zaehler.
+     */
+    getLiveScore(gameId) {
+      return {
+        own: state.shots.filter(s => s.gameId === gameId && s.outcome === 'goal').length,
+        opp: this.getLiveGoalsAgainst(gameId),
+      };
+    },
+
+    /**
+     * Laufende Halbzeit eines Spiels. Pro Spiel gespeichert, damit ein
+     * Wechsel im Spielmodus nicht die Halbzeit des vorigen Spiels mitnimmt.
+     */
+    getLiveHalf(gameId) {
+      const g = state.games.find(g => g.id === gameId);
+      return g && g.liveHalf === 2 ? 2 : 1;
+    },
+
+    setLiveHalf(gameId, half) {
+      const i = state.games.findIndex(g => g.id === gameId);
+      if (i >= 0) {
+        state.games[i].liveHalf = half === 2 ? 2 : 1;
+        persist(state);
+      }
+    },
+
     getLiveGoalsAgainst(gameId) {
       const g = state.games.find(g => g.id === gameId);
       return g ? (g.liveGoalsAgainst || 0) : 0;
@@ -431,6 +514,10 @@ App.data = (function () {
           return acc;
         }, []);
     },
+
+    // ── Halbzeiten ────────────────────────────────────────
+    // Der Spielmodus rechnet damit die 2. Halbzeit auf die Spielminute drauf.
+    HALF_MINUTES,
 
     // ── Import / Export ───────────────────────────────────
     exportJSON()  { return JSON.stringify(state, null, 2); },
