@@ -483,6 +483,24 @@ App.views = (function () {
         .filter(z => z.wuerfe > 0)
         .map(z => ({ ...z, pct: Math.round(z.tore / z.wuerfe * 100) }));
 
+      // Wohin geworfen. Nur Tore mit erfasster Zone — ein Fehlwurf hat keine,
+      // und Toren ohne Angabe eine zu erfinden waere geraten.
+      const torzonen = { tl:0, tm:0, tr:0, ml:0, mm:0, mr:0, bl:0, bm:0, br:0 };
+      let mitZone = 0;
+      wuerfe.filter(s => s.outcome === 'goal' && s.goalZone).forEach(s => {
+        if (torzonen[s.goalZone] != null) { torzonen[s.goalZone]++; mitZone++; }
+      });
+
+      const torzonenBlock = mitZone === 0
+        ? `<div class="text-muted" style="padding:14px 0">
+             ${tore === 0 ? 'Noch kein Tor erfasst'
+                          : 'Zu den Toren wurde keine Torzone erfasst'}</div>`
+        : `<div class="goalzone-host" id="pd-goalzone"></div>
+           <div class="text-muted text-sm analyse-fuss">
+             ${isOwn ? 'Aus eigener Sicht' : 'Aus Sicht des Torwarts'} ·
+             ${mitZone} von ${tore} Toren mit Torzone erfasst
+           </div>`;
+
       const zonenTabelle = proZone.length === 0
         ? '<div class="text-muted" style="padding:14px 0">Keine Wurfpositionen erfasst</div>'
         : `<div class="table-wrap">
@@ -507,8 +525,10 @@ App.views = (function () {
           <div class="gs-kpi"><span class="v">${wuerfe.filter(s => s.outcome === 'miss').length}</span><span class="l">Daneben</span></div>
           <div class="gs-kpi"><span class="v">${wuerfe.filter(s => s.outcome === 'block').length}</span><span class="l">Geblockt</span></div>
         </div>
-        <div class="card-title" style="margin:16px 0 8px">Wurfkarte</div>
+        <div class="card-title" style="margin:16px 0 8px">Wurfkarte <span class="card-title-hint">von wo geworfen</span></div>
         <div class="live-court-wrap" id="pd-court"></div>
+        <div class="card-title" style="margin:18px 0 8px">Torzonen <span class="card-title-hint">wohin getroffen</span></div>
+        ${torzonenBlock}
         <div class="card-title" style="margin:18px 0 8px">Nach Zone</div>
         ${zonenTabelle}
         <div class="form-actions">
@@ -521,6 +541,10 @@ App.views = (function () {
         document.getElementById('pd-court')?.appendChild(svg);
         if (isOwn) App.court.renderShots(svg, wuerfe, App.data.getPlayers());
         else       App.court.renderOpponentShots(svg, wuerfe);
+
+        document.getElementById('pd-goalzone')?.appendChild(
+          App.court.buildGoalZoneGrid({ zones: torzonen, total: mitZone },
+                                      isOwn ? '63,185,104' : undefined));
       }, 0);
     }
 
