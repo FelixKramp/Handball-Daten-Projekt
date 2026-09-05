@@ -60,6 +60,53 @@ Verified interactively at `http://localhost:5500` in both light and dark mode, a
 
 **Disclosed substitution:** this build's finish review and this document were produced in-thread by the same session that built the world, not by the shipped `impeccable-finish-reviewer`/`impeccable-documenter` subagents. Reason: those agents require real screenshot files on disk, and this session's browser tool returns screenshots inline rather than as file paths, with no in-session path to export them — passing no screenshots to the reviewer would mean it audits nothing. The visual checks above were run directly against the live app instead, including interaction and save-flow states a static screenshot pipeline would not have exercised. Nothing here should be read as a skipped review, but a fresh pair of eyes (a real subagent pass, or the user's own look) has not happened yet.
 
+## Drei Arten von Information — und wohin Neues gehört
+
+Die Erfassung wächst mit jedem Spiel um Wünsche: Tempogegenstoß, technische
+Fehler, Überzahl, Siebenmeter-Quote. Wer jeden davon als weiteren Knopf in
+die Ergebnisreihe legt, hat nach fünf Runden ein Formular, das im Spiel
+niemand mehr bedienen kann. Deshalb sortiert sich alles Neue in genau eine
+von drei Schubladen — und die Schublade bestimmt die Bedienung.
+
+**1. Ergebnis — genau eines, immer nötig.**
+Tor, Fehlschuss, Geblockt, Pfosten. Eine Knopfreihe, gegenseitig
+ausschließend, gezeichnet als Kästchen im Formular-Stil. *Diese Reihe wächst
+nicht.* Sie ist die Frage „was ist aus dem Wurf geworden", und darauf gibt es
+keine sechste Antwort.
+
+**2. Merkmal — beliebig viele, immer freiwillig.**
+Beschreibt, *wie* der Wurf zustande kam: Tempogegenstoß, später vielleicht
+Überzahl oder Konter. Additiv, also Kästchen zum Ankreuzen, nie ein
+Ergebnis-Knopf. Technisch ein `tags`-Array am Wurf und ein Eintrag in
+`App.data.SHOT_TAGS` — Formular, Protokoll und Analyse lesen aus dieser
+Liste, angefasst werden muss dafür nichts. Ein neues Merkmal kostet eine
+Zeile und ändert an alten Daten nichts, weil ein fehlendes Array wie ein
+leeres gelesen wird.
+
+**3. Ereignis ohne Wurf — eigener Knopf, eigene Maske, eigener Speicher.**
+Ein technischer Fehler hat keinen Wurfort, kein Ergebnis, keine Torzone. Als
+Wurf geführt würde er jede Trefferquote verfälschen: er erhöht den Nenner,
+ohne je ein Tor werden zu können. Solche Ereignisse liegen deshalb in einem
+eigenen Array (`turnovers`) mit eigenem Zähler, hängen im Schnellzugriff
+unter der Ergebnisreihe an einem gestrichelten Knopf und öffnen eine kurze
+eigene Maske. Zeitstrafen, Auszeiten oder Ballgewinne gehören später in
+dieselbe Schublade.
+
+**Woran man die Schublade erkennt:** Schließt es andere Antworten aus und
+muss immer beantwortet werden? → Ergebnis. Kann es zutreffen oder nicht,
+während der Wurf trotzdem vollständig ist? → Merkmal. Gibt es gar keinen
+Wurf? → Ereignis.
+
+**Sichtbare Folge im Formular:** Kästchen heißt „mehrere möglich", Kreis
+heißt „genau eines" — die Unterscheidung, die jedes Papierformular auch
+macht. Ausgefüllt wird das Zeichen selbst, nie nur ein Rahmen eingefärbt;
+Bedeutung hängt hier nirgends allein an einer Farbe.
+
+**Migration:** Jedes neue Feld braucht einen Eintrag in `migriere()` in
+`data.js`. Die Funktion läuft beim Laden *und* beim Wiederherstellen einer
+Sicherung — eine ältere Sicherung bringt den neuen Zähler sonst nicht mit,
+und `nextId` liefert `NaN`.
+
 ## Extending the world later
 
 If/when this world is extended past Spielmodus, reuse the `--form-*` token names and the `.matchform`/`.modal-matchform` scoping pattern rather than inventing a second naming scheme, and keep the same constraint that outcome/team colors stay the app-wide `--green`/`--accent`/`--yellow`/`--blue`.
