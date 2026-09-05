@@ -459,6 +459,34 @@ App.data = (function () {
       return { zones, total: withZone };
     },
 
+    /**
+     * Trefferquote je Wurfposition auf dem Feld — fuer eigene Wuerfe und
+     * Gegnerwuerfe identisch aufgebaut. Beantwortet "von wo fallen die
+     * Tore?"; aus der Wurfkarte laesst sich das nur schaetzen.
+     *
+     * Anders als getGoalZoneStats werden hier ALLE Wuerfe gezaehlt, nicht
+     * nur die Tore — sonst gaebe es keine Quote. Wuerfe ohne Position
+     * (aeltere Eintraege) laufen unter 'ohne' mit, statt zu verschwinden.
+     */
+    getPositionStats(gameId, side = 'own', half) {
+      const shots = side === 'own'
+        ? this.getShots(gameId, half)
+        : this.getOpponentShots(gameId, half);
+
+      const proZone = new Map();
+      shots.forEach(s => {
+        const id = s.position || 'ohne';
+        if (!proZone.has(id)) proZone.set(id, { position: id, shots: 0, goals: 0 });
+        const e = proZone.get(id);
+        e.shots++;
+        if (s.outcome === 'goal') e.goals++;
+      });
+
+      return [...proZone.values()]
+        .map(e => ({ ...e, pct: e.shots > 0 ? Math.round(e.goals / e.shots * 100) : 0 }))
+        .sort((a, b) => b.goals - a.goals || b.shots - a.shots);
+    },
+
     // Minute-by-minute momentum timeline: cumulative goals for both sides + running diff.
     getMomentumData(gameId, half) {
       const goals = this._goalTimeline(gameId, half);

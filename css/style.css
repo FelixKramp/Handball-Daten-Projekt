@@ -207,6 +207,26 @@ body {
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
 
+/* Analyse-Raster.
+   Wurfstatistik (drei Zahlen) und Torzonen (ein 3x3-Gitter) brauchen wenig
+   Platz, die beiden Tabellen viel. Ein Drittel je Karte wie bei .grid-3 hiess
+   halbleere Kaesten neben gequetschten Tabellen — deshalb ein 12er-Raster.
+   Eigene Wuerfe und Gegnerwuerfe benutzen dieselben Klassen, damit beide
+   Reiter gleich aussehen. */
+.analyse-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.analyse-grid > .analyse-schmal { grid-column: span 3; }
+.analyse-grid > .analyse-halb   { grid-column: span 6; }
+.analyse-grid > .analyse-voll   { grid-column: span 12; }
+
+.analyse-kopf  { font-size: 13px; line-height: 1.45; margin-bottom: 12px; }
+.analyse-fuss  { text-align: center; margin-top: 8px; }
+.analyse-leer  { padding: 20px; text-align: center; }
+
 .section { margin-bottom: 24px; }
 .section-header {
   display: flex;
@@ -1102,6 +1122,10 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 
 /* iPad (Hochformat) & schmale Fenster: Sidebar wird zur Icon-Leiste */
 @media (max-width: 1024px) {
+  /* Tablet quer: Tabellen auf volle Breite, die schmalen Karten nebeneinander */
+  .analyse-grid > .analyse-schmal { grid-column: span 6; }
+  .analyse-grid > .analyse-halb   { grid-column: span 12; }
+
   :root { --sidebar-w: 64px; }
   .sidebar-brand { justify-content: center; padding: 16px 8px; }
   .brand-text { display: none; }
@@ -1119,6 +1143,11 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 
 /* Handy: Sidebar wird zur unteren Tab-Leiste */
 @media (max-width: 700px) {
+  /* Klassen statt `> *`: sonst gewinnt die spezifischere Grundregel oben */
+  .analyse-grid > .analyse-schmal,
+  .analyse-grid > .analyse-halb,
+  .analyse-grid > .analyse-voll { grid-column: span 12; }
+
   :root { --sidebar-w: 0px; }
   .sidebar {
     top: auto; right: 0;
