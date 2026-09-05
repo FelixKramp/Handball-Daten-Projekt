@@ -31,7 +31,8 @@ Longer-term, explicitly future (not a current requirement): automating the data 
 
 - Views: Dashboard, Live/"Spielmodus" (in-game capture), Kader (squad/roster), Spielanalyse (analysis), Spielplan (schedule), Statistiken (season stats).
 - Live capture records real court throw position and goal-zone ("Torwand") position per throw, per player, plus opponent roster and live goals-against count.
-- Data model (localStorage, `js/data.js`): `players[]`, `games[]` with per-game throws, opponent roster, and live score tracking; JSON export/import for backup.
+- Data model (localStorage, `js/data.js`): `players[]`, `games[]` with per-game throws, opponent roster, live score and half tracking; JSON export/import for backup. Game minutes run continuously (2nd half starts at minute 31), so every throw can be placed in a half.
+- Spielanalyse covers running games, not only finished ones, and can be narrowed to one half — the halftime/timeout read is a first-class path, not a post-game afterthought.
 - Interface language is German; UI copy and terminology (Kader, Spielplan, Spielanalyse, Wurfzonen, Torwand, Sicherung) are established product vocabulary, not incidental — preserve unless the user changes them.
 - Undecided: whether/how multi-team or multi-user support will work if the tool is ever used by other coaches; whether automated (non-manual) data capture is pursued and how.
 
