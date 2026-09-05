@@ -5,7 +5,9 @@ App.data = (function () {
   const KEY = 'hb_data_v1';
 
   const DEFAULTS = {
-    team: { name: 'Meine Mannschaft', season: '2025/26', apiLeagueId: '', apiTeamId: '' },
+    // halfMinutes: Länge einer Halbzeit. 30 bei Erwachsenen und A/B-Jugend,
+    // darunter kürzer (D-Jugend z.B. 2×20) — deshalb einstellbar.
+    team: { name: 'Meine Mannschaft', season: '2025/26', apiLeagueId: '', apiTeamId: '', halfMinutes: 30 },
     players: [],
     games: [],
     shots: [],
@@ -286,6 +288,52 @@ App.data = (function () {
       if (!topId) return null;
       const player = state.players.find(p => p.id == topId);
       return player ? { player, goals: tally[topId] } : null;
+    },
+
+    /** Halbzeitlänge in Sekunden — Altdaten ohne Einstellung zählen als 30 Minuten. */
+    getHalfSeconds() {
+      const min = parseInt(state.team?.halfMinutes, 10);
+      return (Number.isFinite(min) && min > 0 ? min : 30) * 60;
+    },
+
+    /**
+     * Torschützen EINES Spiels, absteigend nach Toren.
+     * Nicht zu verwechseln mit getPlayerGameStats() weiter unten — die dreht
+     * es um und liefert die Spiele EINES Spielers.
+     *
+     * Enthält nur Spieler, die in diesem Spiel geworfen haben — eine Liste
+     * voller Nullzeilen sagt nichts und macht die Torschützen unauffindbar.
+     */
+    getScorersForGame(gameId) {
+      const shots = this.getShots(gameId);
+      const proSpieler = new Map();
+
+      shots.forEach(s => {
+        if (s.playerId == null) return;
+        if (!proSpieler.has(s.playerId)) {
+          proSpieler.set(s.playerId, { shots: 0, goals: 0, misses: 0, blocks: 0, seven: 0, sevenGoals: 0 });
+        }
+        const e = proSpieler.get(s.playerId);
+        e.shots++;
+        if (s.outcome === 'goal')  e.goals++;
+        if (s.outcome === 'miss')  e.misses++;
+        if (s.outcome === 'block') e.blocks++;
+        if (s.position === 'p7') {
+          e.seven++;
+          if (s.outcome === 'goal') e.sevenGoals++;
+        }
+      });
+
+      return [...proSpieler.entries()]
+        .map(([playerId, e]) => {
+          const player = state.players.find(p => p.id === playerId);
+          return player ? {
+            player, ...e,
+            pct: e.shots > 0 ? Math.round(e.goals / e.shots * 100) : 0,
+          } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.goals - a.goals || b.pct - a.pct);
     },
 
     getShotStats(gameId) {

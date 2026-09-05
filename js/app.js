@@ -479,7 +479,14 @@ App.ui = (function () {
             const season = document.getElementById('f-season')?.value.trim();
             const league = document.getElementById('f-league')?.value.trim();
             const teamId = document.getElementById('f-teamid')?.value.trim();
-            App.data.setTeam({ name: name || team.name, season: season || team.season, apiLeagueId: league, apiTeamId: teamId });
+            const halbzeit = parseInt(document.getElementById('f-halfminutes')?.value, 10);
+            App.data.setTeam({
+              name: name || team.name,
+              season: season || team.season,
+              apiLeagueId: league,
+              apiTeamId: teamId,
+              halfMinutes: Number.isFinite(halbzeit) && halbzeit > 0 ? halbzeit : (team.halfMinutes || 30),
+            });
             teamNameEl.textContent = name || team.name;
             seasonEl.textContent   = season || team.season;
             closeModal();

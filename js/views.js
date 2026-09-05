@@ -233,8 +233,13 @@ App.views = (function () {
     const games = App.data.getGames().filter(g => g.played);
 
     if (games.length === 0) {
-      el.innerHTML = `<div class="empty"><h3>Keine gespielten Spiele</h3>
-        <p>Trage zuerst Spielergebnisse im Spielplan ein.</p></div>`;
+      // Verwies frueher auf den Spielplan — dort laesst sich das Ergebnis aber
+      // nur muehsam von Hand nachtragen, waehrend es im Spielmodus bereits
+      // vollstaendig erfasst ist und nur noch uebernommen werden muss.
+      el.innerHTML = `<div class="empty"><h3>Noch kein Spiel abgeschlossen</h3>
+        <p>Schließe ein Spiel im Spielmodus mit „Spiel speichern" ab —
+           der erfasste Spielstand wird dabei übernommen.</p>
+        <button class="btn btn-primary" data-view="live">Zum Spielmodus</button></div>`;
       return;
     }
 
@@ -311,10 +316,101 @@ App.views = (function () {
       this.value = '';
     });
 
+    /**
+     * Spielbericht über dem Wurfbild: Endstand, Kennzahlen, Torschützen.
+     * Die Wurfkarte zeigt, WO geworfen wurde — hier steht, WER und WIE GUT.
+     */
+    function gameSummaryHTML(gameId) {
+      const game = App.data.getGames().find(g => g.id === gameId);
+      if (!game) return '';
+
+      const eigen  = App.data.getShotStats(gameId);
+      const quote  = eigen.total > 0 ? Math.round(eigen.goals / eigen.total * 100) : 0;
+      const spieler = App.data.getScorersForGame(gameId);
+
+      // Gegentore NICHT aus der Gegner-Wurfstatistik: die ist nur gefüllt,
+      // wenn man auch gegnerische Würfe einzeln erfasst hat. Der Spielstand
+      // kommt im Normalfall aus dem Zähler im Spielmodus.
+      const gegentore = game.played && game.goalsAgainst != null
+        ? game.goalsAgainst
+        : App.data.getLiveGoalsAgainst(gameId);
+
+      // Der gespeicherte Endstand kann von den erfassten Würfen abweichen,
+      // etwa wenn ein Tor nicht erfasst wurde. Dann beides zeigen statt
+      // stillschweigend eine der beiden Zahlen zu bevorzugen.
+      const erfasst = eigen.goals;
+      const weichtAb = game.played && game.goalsFor != null && game.goalsFor !== erfasst;
+
+      const siebenGesamt = spieler.reduce((s, e) => s + e.seven, 0);
+      const siebenTore   = spieler.reduce((s, e) => s + e.sevenGoals, 0);
+
+      const zeilen = spieler.length === 0
+        ? `<tr><td colspan="5" style="text-align:center;padding:22px;color:var(--text-2)">
+             Noch keine Würfe mit Spieler erfasst</td></tr>`
+        : spieler.map((e, i) => `
+          <tr>
+            <td class="scorer-rank">${i + 1}</td>
+            <td><span class="scorer-num">${e.player.number}</span> ${e.player.name}</td>
+            <td class="num"><strong>${e.goals}</strong></td>
+            <td class="num">${e.shots}</td>
+            <td class="num">${e.pct}%${e.seven > 0 ? ` <span class="scorer-seven">${e.sevenGoals}/${e.seven} 7m</span>` : ''}</td>
+          </tr>`).join('');
+
+      return `
+        <div class="section">
+          <div class="card game-summary">
+            <div class="gs-head">
+              <div>
+                <div class="card-title" style="margin-bottom:4px">Spielbericht</div>
+                <div class="gs-meta">${dateFmt(game.date)} · ${game.homeAway === 'H' ? 'Heim' : 'Auswärts'} gegen ${game.opponent}</div>
+              </div>
+              <div class="gs-score">
+                ${game.played
+                  ? `<span class="${game.goalsFor > game.goalsAgainst ? 'text-green' : game.goalsFor < game.goalsAgainst ? 'text-red' : ''}">${game.goalsFor}:${game.goalsAgainst}</span>`
+                  : `<span class="gs-open">${erfasst}:${App.data.getLiveGoalsAgainst(gameId)}</span>`}
+                <div class="gs-score-label">${game.played ? resultWord(game) : 'noch nicht gespeichert'}</div>
+              </div>
+            </div>
+
+            ${weichtAb ? `
+            <div class="gs-hint">
+              Gespeicherter Endstand ${game.goalsFor}:${game.goalsAgainst}, erfasst sind ${erfasst} eigene Tore.
+              Im Spielmodus mit „Ergebnis aktualisieren" angleichen.
+            </div>` : ''}
+
+            <div class="gs-kpis">
+              <div class="gs-kpi"><span class="v">${eigen.goals}</span><span class="l">Tore</span></div>
+              <div class="gs-kpi"><span class="v">${eigen.total}</span><span class="l">Würfe</span></div>
+              <div class="gs-kpi"><span class="v">${quote}%</span><span class="l">Trefferquote</span></div>
+              <div class="gs-kpi"><span class="v">${eigen.misses}</span><span class="l">Fehlwürfe</span></div>
+              <div class="gs-kpi"><span class="v">${eigen.blocks}</span><span class="l">Geblockt</span></div>
+              <div class="gs-kpi"><span class="v">${siebenTore}/${siebenGesamt}</span><span class="l">Siebenmeter</span></div>
+              <div class="gs-kpi"><span class="v">${gegentore}</span><span class="l">Gegentore</span></div>
+            </div>
+
+            <div class="table-wrap gs-scorers">
+              <table>
+                <thead>
+                  <tr><th style="width:34px"></th><th>Spieler</th><th class="num">Tore</th><th class="num">Würfe</th><th class="num">Quote</th></tr>
+                </thead>
+                <tbody>${zeilen}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function resultWord(game) {
+      if (game.goalsFor > game.goalsAgainst) return 'Sieg';
+      if (game.goalsFor < game.goalsAgainst) return 'Niederlage';
+      return 'Unentschieden';
+    }
+
     // ── Shot chart (own or opponent) ─────────────────────────────────
     function renderShotChart(side) {
       const isOwn = side === 'own';
       body.innerHTML = `
+        ${isOwn ? gameSummaryHTML(activeGameId) : ''}
         <div class="court-wrap">
           <div class="court-controls">
             <button class="btn btn-primary" id="btn-add-shot">
@@ -690,9 +786,16 @@ App.views = (function () {
         <label>Teamname</label>
         <input class="form-control" id="f-teamname" value="${team.name || ''}">
       </div>
-      <div class="form-group">
-        <label>Saison</label>
-        <input class="form-control" id="f-season" value="${team.season || ''}" placeholder="2025/26">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Saison</label>
+          <input class="form-control" id="f-season" value="${team.season || ''}" placeholder="2025/26">
+        </div>
+        <div class="form-group">
+          <label>Halbzeit (Minuten)</label>
+          <input class="form-control" id="f-halfminutes" type="number" min="1" max="45"
+                 value="${team.halfMinutes || 30}" placeholder="30">
+        </div>
       </div>
       <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px;">
         <div class="card-title" style="margin-bottom:12px">OpenLigaDB API (optional)</div>
@@ -756,6 +859,7 @@ App.views = (function () {
           </select>
           <button class="btn btn-outline btn-sm" id="btn-matchday-squad" type="button">Spieltagskader</button>
           <button class="btn btn-outline btn-sm" id="btn-starters" type="button">Start 7</button>
+          <button class="btn btn-primary btn-sm" id="btn-finish-game" type="button">Spiel speichern</button>
         </div>
 
         <div class="live-header matchform-scoreboard">
@@ -1001,10 +1105,29 @@ App.views = (function () {
       if (hz2) hz2.style.display = ts.timerHalf === 1 ? '' : 'none';
     }
 
+    function stopTimer() {
+      clearInterval(ts.timerInterval);
+      ts.timerInterval = null;
+      ts.timerRunning  = false;
+    }
+
     function startTimer() {
       if (ts.timerInterval) return;
       ts.timerInterval = setInterval(() => {
         ts.timerSeconds++;
+
+        // Am Halbzeitende von selbst stehenbleiben — sonst laeuft die Uhr
+        // weiter und die erfassten Minuten stimmen ab da nicht mehr.
+        if (ts.timerSeconds >= App.data.getHalfSeconds()) {
+          ts.timerSeconds = App.data.getHalfSeconds();
+          stopTimer();
+          updateTimerUI();
+          App.ui.toast(ts.timerHalf === 1
+            ? 'Halbzeit — mit „2. HZ" weiter'
+            : 'Spielzeit abgelaufen — mit „Spiel speichern" abschließen', 'inf');
+          return;
+        }
+
         const t = document.getElementById('live-timer');
         if (t) t.textContent = fmtTime(ts.timerSeconds);
       }, 1000);
@@ -1016,18 +1139,24 @@ App.views = (function () {
     refreshRecent();
 
     document.getElementById('live-timer-toggle').addEventListener('click', () => {
+      // Steht die Uhr am Halbzeitende, bringt Weiterlaufen nichts —
+      // erst umstellen (2. HZ) oder das Spiel speichern.
+      if (!ts.timerRunning && ts.timerSeconds >= App.data.getHalfSeconds()) {
+        App.ui.toast(ts.timerHalf === 1
+          ? 'Halbzeit ist um — mit „2. HZ" weiter'
+          : 'Spielzeit ist abgelaufen', 'inf');
+        return;
+      }
       ts.timerRunning = !ts.timerRunning;
       if (ts.timerRunning) startTimer();
-      else { clearInterval(ts.timerInterval); ts.timerInterval = null; }
+      else stopTimer();
       updateTimerUI();
     });
 
     document.getElementById('live-hz-toggle').addEventListener('click', () => {
-      clearInterval(ts.timerInterval);
-      ts.timerInterval = null;
-      ts.timerRunning  = false;
-      ts.timerSeconds  = 0;
-      ts.timerHalf     = 2;
+      stopTimer();
+      ts.timerSeconds = 0;
+      ts.timerHalf    = 2;
       updateTimerUI();
     });
 
@@ -1061,6 +1190,7 @@ App.views = (function () {
       refreshScore();
       refreshRecent();
       refreshSquadButton();
+      refreshFinishButton();
       ladeGespeichertesVideo();   // jedes Spiel hat seine eigene Aufnahme
     });
 
@@ -1091,6 +1221,42 @@ App.views = (function () {
     document.getElementById('btn-starters')?.addEventListener('click', () => {
       openStartersModal(currentGameId, refreshSquadButton);
     });
+
+    // ── Spiel abschließen ──────────────────────────────────────────
+    //
+    // Der Live-Spielstand wird aus den erfassten Würfen abgeleitet, steht
+    // aber nicht im Spiel selbst. Ohne diesen Schritt bleibt das Spiel im
+    // Spielplan auf 0:0 stehen, obwohl alles eingetragen ist.
+    document.getElementById('btn-finish-game')?.addEventListener('click', () => {
+      const game = App.data.getGames().find(g => g.id === currentGameId);
+      if (!game) return;
+
+      const eigene = App.data.getShots(currentGameId).filter(s => s.outcome === 'goal').length;
+      const gegner = App.data.getLiveGoalsAgainst(currentGameId);
+
+      App.ui.askConfirm(
+        `Endstand ${eigene}:${gegner} für dieses Spiel übernehmen?`
+        + (game.played ? ' Das bisher gespeicherte Ergebnis wird ersetzt.' : ''),
+        'Speichern'
+      ).then(ja => {
+        if (!ja) return;
+        App.data.updateGame(currentGameId, {
+          played: true,
+          goalsFor: eigene,
+          goalsAgainst: gegner,
+        });
+        App.ui.toast(`Spiel gespeichert — ${eigene}:${gegner}`, 'ok');
+        refreshFinishButton();
+      });
+    });
+
+    function refreshFinishButton() {
+      const btn = document.getElementById('btn-finish-game');
+      if (!btn) return;
+      const game = App.data.getGames().find(g => g.id === currentGameId);
+      btn.textContent = game && game.played ? 'Ergebnis aktualisieren' : 'Spiel speichern';
+    }
+    refreshFinishButton();
 
     // ── Attack modal ───────────────────────────────────────────────
     const GOAL_TARGET_ZONES = [
