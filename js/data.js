@@ -5,7 +5,9 @@ App.data = (function () {
   const KEY = 'hb_data_v1';
 
   const DEFAULTS = {
-    team: { name: 'Meine Mannschaft', season: '2025/26', apiLeagueId: '', apiTeamId: '' },
+    // halfMinutes: Länge einer Halbzeit. 30 bei Erwachsenen und A/B-Jugend,
+    // darunter kürzer (D-Jugend z.B. 2×20) — deshalb einstellbar.
+    team: { name: 'Meine Mannschaft', season: '2025/26', apiLeagueId: '', apiTeamId: '', halfMinutes: 30 },
     players: [],
     games: [],
     shots: [],
@@ -46,7 +48,16 @@ App.data = (function () {
   // Der Live-Timer startet zur Pause zwar wieder bei 0, rechnet die erste
   // Halbzeit beim Speichern aber dazu.
 
-  const HALF_MINUTES = 30;
+  /**
+   * Halbzeitlaenge in Minuten aus den Einstellungen. Bewusst eine Funktion
+   * und keine Konstante: bei 2x20 (juengere Jahrgaenge) wuerden sonst Wuerfe
+   * der 2. Halbzeit um 30 statt 20 Minuten verschoben und anschliessend der
+   * falschen Halbzeit zugeordnet.
+   */
+  function halfMinutes() {
+    const min = parseInt(state.team?.halfMinutes, 10);
+    return Number.isFinite(min) && min > 0 ? min : 30;
+  }
 
   /**
    * Halbzeit eines Eintrags. Ist sie mitgespeichert, gilt sie; sonst wird
@@ -56,7 +67,7 @@ App.data = (function () {
    */
   function halfOf(shot) {
     if (shot.half === 1 || shot.half === 2) return shot.half;
-    return (shot.minute != null && shot.minute > HALF_MINUTES) ? 2 : 1;
+    return (shot.minute != null && shot.minute > halfMinutes()) ? 2 : 1;
   }
 
   /** half === 1|2 filtert, alles andere (undefined, 'all') laesst durch. */
@@ -208,11 +219,13 @@ App.data = (function () {
       return added;
     },
 
-    // ── Spieltagskader ────────────────────────────────────
+    // ── Spieltagskader und Start 7 ────────────────────────
     //
-    // Pro Spiel eine Liste von Spieler-IDs. Fehlt sie (Altdaten oder noch
-    // nicht gesetzt), gilt der komplette Kader — dadurch aendert sich fuer
-    // bestehende Spiele nichts.
+    // Pro Spiel zwei Listen von Spieler-IDs auf dem Spiel-Objekt:
+    //   squad    — wer heute ueberhaupt dabei ist
+    //   starters — die Anfangsformation
+    // Fehlt eine (Altdaten oder noch nicht gesetzt), gilt der komplette
+    // Kader bzw. keine Start 7 — bestehende Spiele aendern sich dadurch nicht.
 
     /** Spieler, die an diesem Spiel teilnehmen. Ohne gesetzten Kader: alle. */
     getMatchdaySquad(gameId) {
@@ -238,23 +251,58 @@ App.data = (function () {
       return game.squad;
     },
 
-    /**
-     * Vorschlag beim ersten Oeffnen: der Kader des zuletzt gespielten
-     * Spiels davor. So hakt man nur die Ausfaelle ab, statt jedes Mal
-     * von vorn auszuwaehlen. Gibt es keinen, zaehlt der ganze Kader.
-     */
-    suggestMatchdaySquad(gameId) {
+    /** Anfangsformation. Ohne gesetzte Start 7 eine leere Liste. */
+    getStarters(gameId) {
       const game = state.games.find(g => g.id === gameId);
-      if (!game) return state.players.map(p => p.id);
+      if (!game || !Array.isArray(game.starters)) return [];
+      // Gleiche Filterrichtung wie beim Kader: geloeschte Spieler fallen raus.
+      return state.players.filter(p => game.starters.includes(p.id));
+    },
+
+    hasStarters(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      return Boolean(game && Array.isArray(game.starters) && game.starters.length > 0);
+    },
+
+    setStarters(gameId, playerIds) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return null;
+      game.starters = [...playerIds];
+      persist(state);
+      return game.starters;
+    },
+
+    /**
+     * Vorschlag beim ersten Oeffnen: die Liste des zuletzt gespielten Spiels
+     * DAVOR. So hakt man nur die Aenderungen ab, statt jedes Mal von vorn
+     * auszuwaehlen. Bewusst nur rueckwaerts: zoege ein frueheres Spiel seine
+     * Aufstellung aus einem spaeteren, waere die Rueckschau falsch.
+     *
+     * @param {'squad'|'starters'} feld
+     * @param {number[]} fallback  Ergebnis, wenn es kein frueheres Spiel gibt.
+     */
+    suggestFromPreviousGame(gameId, feld, fallback) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return fallback;
 
       const frueher = state.games
-        .filter(g => g.id !== gameId && Array.isArray(g.squad) && g.date && g.date <= game.date)
+        .filter(g => g.id !== gameId && Array.isArray(g[feld]) && g.date && g.date <= game.date)
         .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
-      if (!frueher) return state.players.map(p => p.id);
+      if (!frueher) return fallback;
       // Nur noch existierende Spieler uebernehmen.
       const vorhanden = new Set(state.players.map(p => p.id));
-      return frueher.squad.filter(id => vorhanden.has(id));
+      return frueher[feld].filter(id => vorhanden.has(id));
+    },
+
+    /** Ohne frueheres Spiel zaehlt der ganze Kader. */
+    suggestMatchdaySquad(gameId) {
+      return this.suggestFromPreviousGame(gameId, 'squad', state.players.map(p => p.id));
+    },
+
+    /** Ohne frueheres Spiel bleibt die Start 7 leer — raten waere hier falsch. */
+    suggestStarters(gameId) {
+      return this.suggestFromPreviousGame(gameId, 'starters', []);
     },
 
     // ── Shots ─────────────────────────────────────────────
@@ -302,6 +350,51 @@ App.data = (function () {
       if (!topId) return null;
       const player = state.players.find(p => p.id == topId);
       return player ? { player, goals: tally[topId] } : null;
+    },
+
+    /** Halbzeitlänge in Sekunden — Altdaten ohne Einstellung zählen als 30 Minuten. */
+    getHalfSeconds() { return halfMinutes() * 60; },
+
+    /**
+     * Torschützen EINES Spiels, absteigend nach Toren.
+     * Nicht zu verwechseln mit getPlayerGameStats() weiter unten — die dreht
+     * es um und liefert die Spiele EINES Spielers.
+     *
+     * Enthält nur Spieler, die in diesem Spiel geworfen haben — eine Liste
+     * voller Nullzeilen sagt nichts und macht die Torschützen unauffindbar.
+     *
+     * @param {1|2} [half] Auf eine Halbzeit einschränken.
+     */
+    getScorersForGame(gameId, half) {
+      const shots = this.getShots(gameId, half);
+      const proSpieler = new Map();
+
+      shots.forEach(s => {
+        if (s.playerId == null) return;
+        if (!proSpieler.has(s.playerId)) {
+          proSpieler.set(s.playerId, { shots: 0, goals: 0, misses: 0, blocks: 0, seven: 0, sevenGoals: 0 });
+        }
+        const e = proSpieler.get(s.playerId);
+        e.shots++;
+        if (s.outcome === 'goal')  e.goals++;
+        if (s.outcome === 'miss')  e.misses++;
+        if (s.outcome === 'block') e.blocks++;
+        if (s.position === 'p7') {
+          e.seven++;
+          if (s.outcome === 'goal') e.sevenGoals++;
+        }
+      });
+
+      return [...proSpieler.entries()]
+        .map(([playerId, e]) => {
+          const player = state.players.find(p => p.id === playerId);
+          return player ? {
+            player, ...e,
+            pct: e.shots > 0 ? Math.round(e.goals / e.shots * 100) : 0,
+          } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.goals - a.goals || b.pct - a.pct);
     },
 
     getShotStats(gameId, half) {
@@ -436,6 +529,46 @@ App.data = (function () {
       persist(state);
     },
 
+    setOpponentRoster(gameId, names) {
+      const g = state.games.find(g => g.id === gameId);
+      if (!g) return null;
+      // Leeres verwerfen und Dubletten zusammenfassen — Nummern werden
+      // haeufig in einem Rutsch eingetippt, da verrutscht schnell etwas.
+      const sauber = [];
+      names.map(n => String(n).trim()).filter(Boolean).forEach(n => {
+        if (!sauber.some(x => x.toLowerCase() === n.toLowerCase())) sauber.push(n);
+      });
+      g.opponentRoster = sauber;
+      persist(state);
+      return g.opponentRoster;
+    },
+
+    /**
+     * Vorschlag fuer den Gegner-Kader. Anders als beim eigenen Kader zaehlt
+     * hier nicht das letzte Spiel, sondern das letzte gegen DENSELBEN Gegner:
+     * im Rueckspiel traegt die Mannschaft dieselben Nummern.
+     * Sonst das, was in diesem Spiel schon an Werfern vorkam.
+     */
+    suggestOpponentRoster(gameId) {
+      const game = state.games.find(g => g.id === gameId);
+      if (!game) return [];
+
+      const frueher = state.games
+        .filter(g => g.id !== gameId
+                  && String(g.opponent).trim().toLowerCase() === String(game.opponent).trim().toLowerCase()
+                  && Array.isArray(g.opponentRoster) && g.opponentRoster.length > 0
+                  && g.date && g.date <= game.date)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+      if (frueher) return [...frueher.opponentRoster];
+
+      const ausWuerfen = [];
+      this.getOpponentShots(gameId).forEach(s => {
+        const n = (s.opponentPlayer || '').trim();
+        if (n && !ausWuerfen.includes(n)) ausWuerfen.push(n);
+      });
+      return ausWuerfen;
+    },
+
     // ── Live Score ────────────────────────────────────────
 
     /**
@@ -517,7 +650,7 @@ App.data = (function () {
 
     // ── Halbzeiten ────────────────────────────────────────
     // Der Spielmodus rechnet damit die 2. Halbzeit auf die Spielminute drauf.
-    HALF_MINUTES,
+    getHalfMinutes: halfMinutes,
 
     // ── Import / Export ───────────────────────────────────
     exportJSON()  { return JSON.stringify(state, null, 2); },

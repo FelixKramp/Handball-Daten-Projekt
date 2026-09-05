@@ -20,8 +20,11 @@ App.views = (function () {
     return '<span class="badge badge-draw">Unentschieden</span>';
   }
 
-  const POSITIONS = ['TH', 'RL', 'LL', 'RM', 'LM', 'RA', 'LA', 'KA', 'PF'];
-  const POS_LABELS = { TH:'Torwart', RL:'Rechtsaußen', LL:'Linksaußen', RM:'Rechtsmitte', LM:'Linksmitte', RA:'Rückraum rechts', LA:'Rückraum links', KA:'Kreisläufer', PF:'Pivot' };
+  // MI (Mittelmann/Spielmacher) fehlte — der Rückraum hat links, MITTE und
+  // rechts. LM/RM (Links-/Rechtsmitte) bleiben für bereits erfasste Spieler
+  // erhalten, damit sich niemandes Position stillschweigend ändert.
+  const POSITIONS = ['TH', 'LL', 'LA', 'MI', 'RA', 'RL', 'KA', 'PF', 'LM', 'RM'];
+  const POS_LABELS = { TH:'Torwart', RL:'Rechtsaußen', LL:'Linksaußen', MI:'Mittelmann', RM:'Rechtsmitte', LM:'Linksmitte', RA:'Rückraum rechts', LA:'Rückraum links', KA:'Kreisläufer', PF:'Pivot' };
 
   // ── Dashboard ────────────────────────────────────────────────────
 
@@ -235,8 +238,12 @@ App.views = (function () {
     const games = App.data.getAnalysableGames();
 
     if (games.length === 0) {
+      // Verweist auf den Spielmodus statt auf den Spielplan: dort wird ohnehin
+      // erfasst, und "Spiel speichern" uebernimmt den Stand von selbst.
       el.innerHTML = `<div class="empty"><h3>Noch nichts auszuwerten</h3>
-        <p>Erfasse im Spielmodus Würfe oder trage im Spielplan ein Ergebnis ein.</p></div>`;
+        <p>Sobald im Spielmodus die ersten Würfe erfasst sind, kannst du hier
+           auswerten — auch mitten im Spiel, etwa für ein Halbzeitfazit.</p>
+        <button class="btn btn-primary" data-view="live">Zum Spielmodus</button></div>`;
       return;
     }
 
@@ -283,6 +290,17 @@ App.views = (function () {
 
     const body = document.getElementById('analysis-body');
 
+    // Klick auf einen Werfer öffnet dessen Wurfkarte für dieses Spiel.
+    // Bewusst HIER und nicht in renderShotChart(): das läuft bei jedem
+    // Reiterwechsel erneut, und der Zuhörer würde sich aufsummieren — der
+    // Klick öffnete dann mehrere Fenster übereinander.
+    body.addEventListener('click', e => {
+      const eigener = e.target.closest('[data-scorer]');
+      if (eigener) { openPlayerShotDetail(activeGameId, 'own', parseInt(eigener.dataset.scorer)); return; }
+      const gegner = e.target.closest('[data-opp-scorer]');
+      if (gegner) openPlayerShotDetail(activeGameId, 'opp', gegner.dataset.oppScorer);
+    });
+
     // ── Video zum ausgewählten Spiel ────────────────────────────────
     const anPlayer   = document.getElementById('an-video-player');
     const anFilename = document.getElementById('an-video-filename');
@@ -326,10 +344,197 @@ App.views = (function () {
       this.value = '';
     });
 
+    /**
+     * Spielbericht über dem Wurfbild: Endstand, Kennzahlen, Torschützen.
+     * Die Wurfkarte zeigt, WO geworfen wurde — hier steht, WER und WIE GUT.
+     */
+    function gameSummaryHTML(gameId, half) {
+      const game = App.data.getGames().find(g => g.id === gameId);
+      if (!game) return '';
+
+      const nurHalbzeit = half === 1 || half === 2;
+      const eigen  = App.data.getShotStats(gameId, half);
+      const quote  = eigen.total > 0 ? Math.round(eigen.goals / eigen.total * 100) : 0;
+      const spieler = App.data.getScorersForGame(gameId, half);
+
+      // Gegentore normalerweise NICHT aus der Gegner-Wurfstatistik: die ist
+      // nur gefüllt, wenn man gegnerische Würfe einzeln erfasst hat — sonst
+      // kommt der Stand aus dem Zähler im Spielmodus.
+      //
+      // Ist eine Halbzeit gewählt, taugt der Zähler aber nicht: er kennt keine
+      // Halbzeiten. Dann zählen nur einzeln erfasste Gegner-Würfe, und gibt es
+      // keine, steht hier ein Strich statt einer Zahl, die zum Rest nicht passt.
+      let gegentore;
+      if (nurHalbzeit) {
+        const oppShots = App.data.getOpponentShots(gameId);
+        gegentore = oppShots.length === 0
+          ? null
+          : App.data.getOpponentShots(gameId, half).filter(s => s.outcome === 'goal').length;
+      } else {
+        gegentore = game.played && game.goalsAgainst != null
+          ? game.goalsAgainst
+          : App.data.getLiveGoalsAgainst(gameId);
+      }
+
+      // Der gespeicherte Endstand kann von den erfassten Würfen abweichen,
+      // etwa wenn ein Tor nicht erfasst wurde. Dann beides zeigen statt
+      // stillschweigend eine der beiden Zahlen zu bevorzugen. Bei gewählter
+      // Halbzeit waere der Vergleich sinnlos — der Endstand gilt fuers ganze Spiel.
+      const erfasst = eigen.goals;
+      const weichtAb = !nurHalbzeit && game.played && game.goalsFor != null && game.goalsFor !== erfasst;
+
+      const siebenGesamt = spieler.reduce((s, e) => s + e.seven, 0);
+      const siebenTore   = spieler.reduce((s, e) => s + e.sevenGoals, 0);
+
+      const zeilen = spieler.length === 0
+        ? `<tr><td colspan="5" style="text-align:center;padding:22px;color:var(--text-2)">
+             Noch keine Würfe mit Spieler erfasst</td></tr>`
+        : spieler.map((e, i) => `
+          <tr class="clickable" data-scorer="${e.player.id}" title="Wurfkarte und Zonen dieses Spielers">
+            <td class="scorer-rank">${i + 1}</td>
+            <td><span class="scorer-num">${e.player.number}</span> ${e.player.name}</td>
+            <td class="num"><strong>${e.goals}</strong></td>
+            <td class="num">${e.shots}</td>
+            <td class="num">${e.pct}%${e.seven > 0 ? ` <span class="scorer-seven">${e.sevenGoals}/${e.seven} 7m</span>` : ''}</td>
+          </tr>`).join('');
+
+      return `
+        <div class="section">
+          <div class="card game-summary">
+            <div class="gs-head">
+              <div>
+                <div class="card-title" style="margin-bottom:4px">Spielbericht${nurHalbzeit ? ` — nur ${half}. Halbzeit` : ''}</div>
+                <div class="gs-meta">${dateFmt(game.date)} · ${game.homeAway === 'H' ? 'Heim' : 'Auswärts'} gegen ${game.opponent}</div>
+              </div>
+              <div class="gs-score">
+                ${game.played
+                  ? `<span class="${game.goalsFor > game.goalsAgainst ? 'text-green' : game.goalsFor < game.goalsAgainst ? 'text-red' : ''}">${game.goalsFor}:${game.goalsAgainst}</span>`
+                  : `<span class="gs-open">${erfasst}:${App.data.getLiveGoalsAgainst(gameId)}</span>`}
+                <div class="gs-score-label">${game.played ? resultWord(game) : 'noch nicht gespeichert'}</div>
+              </div>
+            </div>
+
+            ${weichtAb ? `
+            <div class="gs-hint">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8 15 14H1z"/><path d="M8 6.4v3.2M8 11.6h.01"/></svg>
+              <span>Gespeicherter Endstand ${game.goalsFor}:${game.goalsAgainst}, erfasst sind ${erfasst} eigene Tore.
+              Im Spielmodus mit „Ergebnis aktualisieren" angleichen.</span>
+            </div>` : ''}
+
+            <div class="gs-kpis">
+              <div class="gs-kpi"><span class="v">${eigen.goals}</span><span class="l">Tore</span></div>
+              <div class="gs-kpi"><span class="v">${eigen.total}</span><span class="l">Würfe</span></div>
+              <div class="gs-kpi"><span class="v">${quote}%</span><span class="l">Trefferquote</span></div>
+              <div class="gs-kpi"><span class="v">${eigen.misses}</span><span class="l">Fehlwürfe</span></div>
+              <div class="gs-kpi"><span class="v">${eigen.blocks}</span><span class="l">Geblockt</span></div>
+              <div class="gs-kpi"><span class="v">${siebenTore}/${siebenGesamt}</span><span class="l">Siebenmeter</span></div>
+              <div class="gs-kpi"><span class="v">${gegentore == null ? '–' : gegentore}</span><span class="l">Gegentore</span></div>
+            </div>
+
+            <div class="table-wrap gs-scorers">
+              <table>
+                <thead>
+                  <tr><th style="width:34px"></th><th>Spieler</th><th class="num">Tore</th><th class="num">Würfe</th><th class="num">Quote</th></tr>
+                </thead>
+                <tbody>${zeilen}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // Reihenfolge der Wurfzonen von links nach rechts übers Feld.
+    const AN_ZONE_ORDER = ['la','hld','hl1','md','m1','p7','km','hr1','hrd','ra'];
+
+    /**
+     * Einzelner Spieler in EINEM Spiel: eigene Wurfkarte und genaue Zahlen
+     * je Zone. Das Balkendiagramm daneben zeigt nur Tore pro Spieler — hier
+     * steht, aus welcher Position sie fielen und was danebenging.
+     *
+     * @param {'own'|'opp'} side
+     * @param {number|string} key  Spieler-ID (eigene) oder Gegner-Bezeichnung.
+     */
+    function openPlayerShotDetail(gameId, side, key) {
+      const isOwn = side === 'own';
+      const alleWuerfe = isOwn ? App.data.getShots(gameId) : App.data.getOpponentShots(gameId);
+      const wuerfe = isOwn
+        ? alleWuerfe.filter(s => s.playerId === key)
+        : alleWuerfe.filter(s => (s.opponentPlayer || 'Unbekannt') === key);
+
+      const player = isOwn ? App.data.getPlayer(key) : null;
+      const titel  = isOwn
+        ? `#${player?.number ?? '–'} ${player?.name ?? 'Spieler'}`
+        : `Gegner ${key}`;
+
+      const tore   = wuerfe.filter(s => s.outcome === 'goal').length;
+      const quote  = wuerfe.length > 0 ? Math.round(tore / wuerfe.length * 100) : 0;
+
+      // Zonen mit mindestens einem Wurf, in Feldreihenfolge.
+      const proZone = AN_ZONE_ORDER
+        .map(z => {
+          const inZone = wuerfe.filter(s => s.position === z);
+          return {
+            zone: z,
+            label: App.court.ZONE_LABELS[z] || z,
+            wuerfe: inZone.length,
+            tore: inZone.filter(s => s.outcome === 'goal').length,
+          };
+        })
+        .filter(z => z.wuerfe > 0)
+        .map(z => ({ ...z, pct: Math.round(z.tore / z.wuerfe * 100) }));
+
+      const zonenTabelle = proZone.length === 0
+        ? '<div class="text-muted" style="padding:14px 0">Keine Wurfpositionen erfasst</div>'
+        : `<div class="table-wrap">
+             <table>
+               <thead><tr><th>Zone</th><th class="num">Würfe</th><th class="num">Tore</th><th class="num">Quote</th></tr></thead>
+               <tbody>${proZone.map(z => `
+                 <tr>
+                   <td>${z.label}</td>
+                   <td class="num">${z.wuerfe}</td>
+                   <td class="num"><strong>${z.tore}</strong></td>
+                   <td class="num">${z.pct}%</td>
+                 </tr>`).join('')}
+               </tbody>
+             </table>
+           </div>`;
+
+      App.ui.openModal(titel, `
+        <div class="pd-kpis">
+          <div class="gs-kpi"><span class="v">${tore}</span><span class="l">Tore</span></div>
+          <div class="gs-kpi"><span class="v">${wuerfe.length}</span><span class="l">Würfe</span></div>
+          <div class="gs-kpi"><span class="v">${quote}%</span><span class="l">Quote</span></div>
+          <div class="gs-kpi"><span class="v">${wuerfe.filter(s => s.outcome === 'miss').length}</span><span class="l">Daneben</span></div>
+          <div class="gs-kpi"><span class="v">${wuerfe.filter(s => s.outcome === 'block').length}</span><span class="l">Geblockt</span></div>
+        </div>
+        <div class="card-title" style="margin:16px 0 8px">Wurfkarte</div>
+        <div class="live-court-wrap" id="pd-court"></div>
+        <div class="card-title" style="margin:18px 0 8px">Nach Zone</div>
+        ${zonenTabelle}
+        <div class="form-actions">
+          <button class="btn btn-outline" onclick="App.ui.closeModal()">Schließen</button>
+        </div>`);
+      document.getElementById('modal-box').classList.add('modal-wide');
+
+      setTimeout(() => {
+        const svg = App.court.build();
+        document.getElementById('pd-court')?.appendChild(svg);
+        if (isOwn) App.court.renderShots(svg, wuerfe, App.data.getPlayers());
+        else       App.court.renderOpponentShots(svg, wuerfe);
+      }, 0);
+    }
+
+    function resultWord(game) {
+      if (game.goalsFor > game.goalsAgainst) return 'Sieg';
+      if (game.goalsFor < game.goalsAgainst) return 'Niederlage';
+      return 'Unentschieden';
+    }
+
     // ── Shot chart (own or opponent) ─────────────────────────────────
     function renderShotChart(side) {
       const isOwn = side === 'own';
       body.innerHTML = `
+        ${isOwn ? gameSummaryHTML(activeGameId, half) : ''}
         <div class="court-wrap">
           <div class="court-controls">
             <button class="btn btn-primary" id="btn-add-shot">
@@ -348,20 +553,19 @@ App.views = (function () {
           </div>
         </div>
         <div class="section" style="margin-top:24px;">
-          <div class="${isOwn ? 'grid-3' : 'grid-2'}">
+          <div class="grid-3">
             <div class="card">
               <div class="card-title">Wurfstatistik${isOwn ? '' : ' (Gegner)'}</div>
               <div id="shot-stats-content"></div>
             </div>
             <div class="card">
-              <div class="card-title">${isOwn ? 'Tore nach Spieler' : 'Torzonen — wo wir kassieren'}</div>
-              <div id="secondary-panel"></div>
+              <div class="card-title">Torzonen — wo wir ${isOwn ? 'treffen' : 'kassieren'}</div>
+              <div id="${isOwn ? 'own-goalzone-panel' : 'secondary-panel'}"></div>
             </div>
-            ${isOwn ? `
             <div class="card">
-              <div class="card-title">Torzonen — wo wir treffen</div>
-              <div id="own-goalzone-panel"></div>
-            </div>` : ''}
+              <div class="card-title">${isOwn ? 'Spieler' : 'Gegner-Werfer'} <span class="card-title-hint">antippen für Wurfkarte</span></div>
+              <div id="shooter-list-panel"></div>
+            </div>
           </div>
         </div>
       `;
@@ -399,6 +603,7 @@ App.views = (function () {
         }
         renderStats();
         renderSecondary();
+        renderShooterList();
         if (isOwn) renderOwnGoalZone();
         if (entryOn) App.court.renderZones(courtSvg, isOwn ? 'own' : 'opp', pickZone);
       }
@@ -426,51 +631,75 @@ App.views = (function () {
       }
 
       function renderSecondary() {
+        // Nur im Gegner-Reiter: Torwart-Heatmap, wo wir kassieren.
         const host = document.getElementById('secondary-panel');
-        if (isOwn) {
-          // Player goals chart
-          const pGoals = {};
-          App.data.getShots(activeGameId, half).filter(s => s.outcome === 'goal').forEach(s => {
-            pGoals[s.playerId] = (pGoals[s.playerId] || 0) + 1;
-          });
-          const players = App.data.getPlayers();
-          const chartData = Object.entries(pGoals)
-            .map(([id, g]) => ({ player: players.find(p => p.id == id), goals: g }))
-            .filter(d => d.player)
-            .sort((a, b) => b.goals - a.goals);
-
-          host.className = 'chart-wrap';
-          host.innerHTML = chartData.length > 0
-            ? '<canvas id="player-goals-chart"></canvas>'
-            : '<div class="text-muted" style="padding:20px;text-align:center">Noch keine Tore erfasst</div>';
-          if (chartData.length > 0) {
-            new Chart(document.getElementById('player-goals-chart').getContext('2d'), {
-              type: 'bar',
-              data: {
-                labels: chartData.map(d => `#${d.player.number} ${d.player.name.split(' ')[0]}`),
-                datasets: [{ data: chartData.map(d => d.goals), backgroundColor: 'rgba(63,185,104,0.7)', borderRadius: 4, label: 'Tore' }]
-              },
-              options: {
-                responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-                plugins: { legend: { display: false } },
-                scales: {
-                  x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                  y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { display: false } }
-                }
-              }
-            });
-          }
+        if (!host) return;
+        const gz = App.data.getGoalZoneStats(activeGameId, 'opp', half);
+        host.className = '';
+        if (gz.total === 0) {
+          host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine Gegner-Tore mit Torzone erfasst.<br>Trage Gegner-Würfe mit Torzone ein (Spielmodus → Abwehr).</div>';
         } else {
-          // Goal-zone heatmap (goalkeeper analysis)
-          const gz = App.data.getGoalZoneStats(activeGameId, 'opp', half);
-          host.className = '';
-          if (gz.total === 0) {
-            host.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Noch keine Gegner-Tore mit Torzone erfasst.<br>Trage Gegner-Würfe mit Torzone ein (Spielmodus → Abwehr).</div>';
-          } else {
-            host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm" style="text-align:center;margin-top:8px">Aus Sicht des Torwarts · Zahl = kassierte Tore</div>';
-            host.querySelector('.goalzone-host').appendChild(App.court.buildGoalZoneGrid(gz));
-          }
+          host.innerHTML = '<div class="goalzone-host"></div><div class="text-muted text-sm" style="text-align:center;margin-top:8px">Aus Sicht des Torwarts · Zahl = kassierte Tore</div>';
+          host.querySelector('.goalzone-host').appendChild(App.court.buildGoalZoneGrid(gz));
         }
+      }
+
+      /**
+       * Werfer-Liste mit genauen Zahlen. Ersetzt das frühere Balkendiagramm:
+       * aus Balkenlängen ließ sich "3 von 5" nicht ablesen, und anklickbar
+       * waren sie auch nicht.
+       */
+      function renderShooterList() {
+        const host = document.getElementById('shooter-list-panel');
+        if (!host) return;
+
+        const zeilen = isOwn
+          ? App.data.getScorersForGame(activeGameId, half).map(e => ({
+              key: e.player.id, attr: 'data-scorer',
+              nr: e.player.number, name: e.player.name,
+              tore: e.goals, wuerfe: e.shots, pct: e.pct,
+            }))
+          : gegnerWerfer(activeGameId, half);
+
+        if (zeilen.length === 0) {
+          host.innerHTML = `<div class="text-muted" style="padding:20px;text-align:center">
+            Noch keine ${isOwn ? 'Würfe mit Spieler' : 'Gegner-Würfe'} erfasst</div>`;
+          return;
+        }
+
+        host.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>${isOwn ? 'Spieler' : 'Werfer'}</th><th class="num">Tore</th><th class="num">Würfe</th><th class="num">Quote</th></tr></thead>
+              <tbody>${zeilen.map(z => `
+                <tr class="clickable" ${z.attr}="${z.key}">
+                  <td>${z.nr != null ? `<span class="scorer-num">${z.nr}</span>` : ''}${z.name}</td>
+                  <td class="num"><strong>${z.tore}</strong></td>
+                  <td class="num">${z.wuerfe}</td>
+                  <td class="num">${z.pct}%</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      }
+
+      /** Gegner sind Freitext ("7", "Nr. 3", ein Name) — danach gruppieren. */
+      function gegnerWerfer(gameId, half) {
+        const proWerfer = new Map();
+        App.data.getOpponentShots(gameId, half).forEach(s => {
+          const key = s.opponentPlayer || 'Unbekannt';
+          if (!proWerfer.has(key)) proWerfer.set(key, { wuerfe: 0, tore: 0 });
+          const e = proWerfer.get(key);
+          e.wuerfe++;
+          if (s.outcome === 'goal') e.tore++;
+        });
+        return [...proWerfer.entries()]
+          .map(([key, e]) => ({
+            key, attr: 'data-opp-scorer', nr: null, name: key,
+            tore: e.tore, wuerfe: e.wuerfe,
+            pct: e.wuerfe > 0 ? Math.round(e.tore / e.wuerfe * 100) : 0,
+          }))
+          .sort((a, b) => b.tore - a.tore || b.pct - a.pct);
       }
 
       function renderOwnGoalZone() {
@@ -725,9 +954,16 @@ App.views = (function () {
         <label>Teamname</label>
         <input class="form-control" id="f-teamname" value="${team.name || ''}">
       </div>
-      <div class="form-group">
-        <label>Saison</label>
-        <input class="form-control" id="f-season" value="${team.season || ''}" placeholder="2025/26">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Saison</label>
+          <input class="form-control" id="f-season" value="${team.season || ''}" placeholder="2025/26">
+        </div>
+        <div class="form-group">
+          <label>Halbzeit (Minuten)</label>
+          <input class="form-control" id="f-halfminutes" type="number" min="1" max="45"
+                 value="${team.halfMinutes || 30}" placeholder="30">
+        </div>
       </div>
       <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px;">
         <div class="card-title" style="margin-bottom:12px">OpenLigaDB API (optional)</div>
@@ -738,6 +974,17 @@ App.views = (function () {
         <div class="form-group">
           <label>Team-ID</label>
           <input class="form-control" id="f-teamid" value="${team.apiTeamId || ''}" placeholder="123">
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px;">
+        <div class="card-title" style="margin-bottom:6px">App-Version</div>
+        <p class="text-muted" style="font-size:12px;margin:0 0 10px">
+          Die App lädt beim Start selbst die neueste Fassung. Wenn du sicher gehen
+          willst — etwa kurz vor einem Spiel — kannst du hier nachsehen.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-outline" id="btn-check-update" type="button">Nach Update suchen</button>
+          <span class="text-muted" style="font-size:12px" id="update-status"></span>
         </div>
       </div>
       <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px;">
@@ -790,6 +1037,9 @@ App.views = (function () {
             ${games.map(g => `<option value="${g.id}" ${g.id === defaultGame.id ? 'selected' : ''}>${dateFmt(g.date)} – ${g.opponent}${g.played ? ' ✓' : ''}</option>`).join('')}
           </select>
           <button class="btn btn-outline btn-sm" id="btn-matchday-squad" type="button">Spieltagskader</button>
+          <button class="btn btn-outline btn-sm" id="btn-starters" type="button">Start 7</button>
+          <button class="btn btn-outline btn-sm" id="btn-opp-roster" type="button">Gegner-Kader</button>
+          <button class="btn btn-primary btn-sm" id="btn-finish-game" type="button">Spiel speichern</button>
         </div>
 
         <div class="live-header matchform-scoreboard">
@@ -872,7 +1122,7 @@ App.views = (function () {
       if (ts.timerSeconds <= 0) return null;
       // Der Timer beginnt zur Pause wieder bei 0. Für eine durchgehende
       // Spielminute (2. HZ ab 31.) die erste Halbzeit dazurechnen.
-      const vorlauf = (ts.timerHalf - 1) * App.data.HALF_MINUTES;
+      const vorlauf = (ts.timerHalf - 1) * App.data.getHalfMinutes();
       return vorlauf + Math.max(1, Math.ceil(ts.timerSeconds / 60));
     }
 
@@ -882,7 +1132,7 @@ App.views = (function () {
      * wo der Halbzeit-Schalter nicht mitläuft. Ohne Minute zählt er.
      */
     function currentHalf(minute) {
-      if (minute != null) return minute > App.data.HALF_MINUTES ? 2 : 1;
+      if (minute != null) return minute > App.data.getHalfMinutes() ? 2 : 1;
       return ts.timerHalf;
     }
 
@@ -1056,10 +1306,29 @@ App.views = (function () {
       }
     }
 
+    function stopTimer() {
+      clearInterval(ts.timerInterval);
+      ts.timerInterval = null;
+      ts.timerRunning  = false;
+    }
+
     function startTimer() {
       if (ts.timerInterval) return;
       ts.timerInterval = setInterval(() => {
         ts.timerSeconds++;
+
+        // Am Halbzeitende von selbst stehenbleiben — sonst laeuft die Uhr
+        // weiter und die erfassten Minuten stimmen ab da nicht mehr.
+        if (ts.timerSeconds >= App.data.getHalfSeconds()) {
+          ts.timerSeconds = App.data.getHalfSeconds();
+          stopTimer();
+          updateTimerUI();
+          App.ui.toast(ts.timerHalf === 1
+            ? 'Halbzeit — mit „2. HZ" weiter'
+            : 'Spielzeit abgelaufen — mit „Spiel speichern" abschließen', 'inf');
+          return;
+        }
+
         const t = document.getElementById('live-timer');
         if (t) t.textContent = fmtTime(ts.timerSeconds);
       }, 1000);
@@ -1075,17 +1344,23 @@ App.views = (function () {
     refreshRecent();
 
     document.getElementById('live-timer-toggle').addEventListener('click', () => {
+      // Steht die Uhr am Halbzeitende, bringt Weiterlaufen nichts —
+      // erst umstellen (2. HZ) oder das Spiel speichern.
+      if (!ts.timerRunning && ts.timerSeconds >= App.data.getHalfSeconds()) {
+        App.ui.toast(ts.timerHalf === 1
+          ? 'Halbzeit ist um — mit „2. HZ" weiter'
+          : 'Spielzeit ist abgelaufen', 'inf');
+        return;
+      }
       ts.timerRunning = !ts.timerRunning;
       if (ts.timerRunning) startTimer();
-      else { clearInterval(ts.timerInterval); ts.timerInterval = null; }
+      else stopTimer();
       updateTimerUI();
     });
 
     document.getElementById('live-hz-toggle').addEventListener('click', () => {
-      clearInterval(ts.timerInterval);
-      ts.timerInterval = null;
-      ts.timerRunning  = false;
-      ts.timerHalf     = ts.timerHalf === 1 ? 2 : 1;
+      stopTimer();
+      ts.timerHalf = ts.timerHalf === 1 ? 2 : 1;
       // Die 2. Halbzeit fängt bei 0:00 an. Der Weg zurück ist eine Korrektur
       // eines Fehlgriffs — da bleibt die Uhr stehen, wo sie steht.
       if (ts.timerHalf === 2) ts.timerSeconds = 0;
@@ -1125,24 +1400,81 @@ App.views = (function () {
       refreshScore();
       refreshRecent();
       refreshSquadButton();
+      refreshFinishButton();
       ladeGespeichertesVideo();   // jedes Spiel hat seine eigene Aufnahme
     });
 
     // ── Spieltagskader ─────────────────────────────────────────────
-    function refreshSquadButton() {
-      const btn = document.getElementById('btn-matchday-squad');
+    function markiere(btn, gesetzt, text) {
       if (!btn) return;
-      const gesetzt = App.data.hasMatchdaySquad(currentGameId);
-      const anzahl  = App.data.getMatchdaySquad(currentGameId).length;
-      btn.textContent = gesetzt ? `Spieltagskader (${anzahl})` : 'Spieltagskader';
+      btn.textContent = text;
       btn.classList.toggle('btn-primary', gesetzt);
       btn.classList.toggle('btn-outline', !gesetzt);
+    }
+
+    function refreshSquadButton() {
+      const gesetzt = App.data.hasMatchdaySquad(currentGameId);
+      const anzahl  = App.data.getMatchdaySquad(currentGameId).length;
+      markiere(document.getElementById('btn-matchday-squad'), gesetzt,
+               gesetzt ? `Spieltagskader (${anzahl})` : 'Spieltagskader');
+
+      const starter = App.data.getStarters(currentGameId).length;
+      markiere(document.getElementById('btn-starters'), starter > 0,
+               starter > 0 ? `Start 7 (${starter})` : 'Start 7');
+
+      const gegner = App.data.getOpponentRoster(currentGameId).length;
+      markiere(document.getElementById('btn-opp-roster'), gegner > 0,
+               gegner > 0 ? `Gegner-Kader (${gegner})` : 'Gegner-Kader');
     }
     refreshSquadButton();
 
     document.getElementById('btn-matchday-squad')?.addEventListener('click', () => {
       openMatchdaySquadModal(currentGameId, refreshSquadButton);
     });
+
+    document.getElementById('btn-starters')?.addEventListener('click', () => {
+      openStartersModal(currentGameId, refreshSquadButton);
+    });
+
+    document.getElementById('btn-opp-roster')?.addEventListener('click', () => {
+      openOpponentRosterModal(currentGameId, refreshSquadButton);
+    });
+
+    // ── Spiel abschließen ──────────────────────────────────────────
+    //
+    // Der Live-Spielstand wird aus den erfassten Würfen abgeleitet, steht
+    // aber nicht im Spiel selbst. Ohne diesen Schritt bleibt das Spiel im
+    // Spielplan auf 0:0 stehen, obwohl alles eingetragen ist.
+    document.getElementById('btn-finish-game')?.addEventListener('click', () => {
+      const game = App.data.getGames().find(g => g.id === currentGameId);
+      if (!game) return;
+
+      const eigene = App.data.getShots(currentGameId).filter(s => s.outcome === 'goal').length;
+      const gegner = App.data.getLiveGoalsAgainst(currentGameId);
+
+      App.ui.askConfirm(
+        `Endstand ${eigene}:${gegner} für dieses Spiel übernehmen?`
+        + (game.played ? ' Das bisher gespeicherte Ergebnis wird ersetzt.' : ''),
+        'Speichern'
+      ).then(ja => {
+        if (!ja) return;
+        App.data.updateGame(currentGameId, {
+          played: true,
+          goalsFor: eigene,
+          goalsAgainst: gegner,
+        });
+        App.ui.toast(`Spiel gespeichert — ${eigene}:${gegner}`, 'ok');
+        refreshFinishButton();
+      });
+    });
+
+    function refreshFinishButton() {
+      const btn = document.getElementById('btn-finish-game');
+      if (!btn) return;
+      const game = App.data.getGames().find(g => g.id === currentGameId);
+      btn.textContent = game && game.played ? 'Ergebnis aktualisieren' : 'Spiel speichern';
+    }
+    refreshFinishButton();
 
     // ── Attack modal ───────────────────────────────────────────────
     const GOAL_TARGET_ZONES = [
@@ -1154,7 +1486,7 @@ App.views = (function () {
     // ── Sortierung der Spielerknöpfe ────────────────────────────────
     // Reihenfolge quer übers Feld: Torwart, dann von links nach rechts,
     // Kreis zum Schluss — so, wie man eine Aufstellung aufsagt.
-    const POS_ORDER = ['TH', 'LL', 'LA', 'LM', 'RM', 'RA', 'RL', 'KA', 'PF'];
+    const POS_ORDER = ['TH', 'LL', 'LA', 'LM', 'MI', 'RM', 'RA', 'RL', 'KA', 'PF'];
     const SORT_KEY  = 'hb_player_sort';
 
     function getPlayerSort() {
@@ -1192,12 +1524,40 @@ App.views = (function () {
       return list.sort(byNumber);
     }
 
-    function playerButtonsHTML(players, mode, gameId) {
-      return sortPlayers(players, mode, gameId).map(p => `
+    function playerButtonHTML(p) {
+      return `
         <button class="live-player-btn" data-pid="${p.id}">
           <span class="pnum">${p.number}</span>
           <span class="pname">${(p.firstname || p.name.split(' ')[0]).substring(0, 8)}</span>
-        </button>`).join('');
+        </button>`;
+    }
+
+    /** Trennzeile über die volle Rasterbreite. Bewusst ohne data-pid — sonst
+     *  zählte sie beim Wiederherstellen der Auswahl als Spielerknopf. */
+    function groupRowHTML(label) {
+      return `<div class="player-group-row">${label}</div>`;
+    }
+
+    /**
+     * Ist eine Start 7 gesetzt, stehen ihre Spieler oben und sind als Gruppe
+     * abgesetzt; innerhalb beider Gruppen greift die gewählte Sortierung.
+     * Eine Regel für alle Sortiermodi — dadurch vorhersagbar.
+     */
+    function playerButtonsHTML(players, mode, gameId) {
+      const starterIds = new Set(App.data.getStarters(gameId).map(p => p.id));
+      const sortiert = sortPlayers(players, mode, gameId);
+
+      const starter = sortiert.filter(p => starterIds.has(p.id));
+      const bank    = sortiert.filter(p => !starterIds.has(p.id));
+
+      // Ohne Start 7 — oder wenn ohnehin alle Angezeigten Starter sind —
+      // bleibt es eine flache Liste ohne Trennzeilen.
+      if (starter.length === 0 || bank.length === 0) {
+        return sortiert.map(playerButtonHTML).join('');
+      }
+
+      return groupRowHTML('Start 7') + starter.map(playerButtonHTML).join('')
+           + groupRowHTML('Bank')    + bank.map(playerButtonHTML).join('');
     }
 
     const SORT_LABELS = { number: 'Nummer', position: 'Position', goals: 'Tore' };
@@ -1218,6 +1578,7 @@ App.views = (function () {
       PF: 'km',    // Pivot             → Zone Kreis
       LA: 'hld',   // Rückraum links    → Halblinks Distanz
       RA: 'hrd',   // Rückraum rechts   → Halbrechts Distanz
+      MI: 'md',    // Mittelmann        → Mitte Distanz
       LM: 'md',    // Linksmitte        → Mitte Distanz
       RM: 'md',    // Rechtsmitte       → Mitte Distanz
     };
@@ -1231,34 +1592,34 @@ App.views = (function () {
     }
 
     /**
-     * Auswahl, wer heute mitspielt. Beim ersten Öffnen ist der Kader des
-     * letzten Spiels vorgeschlagen — man hakt nur die Ausfälle ab.
+     * Spielerauswahl per Antippen — Grundlage für Spieltagskader und Start 7.
+     * Beide Fenster sind bis auf Titel, Ausgangsmenge und Obergrenze gleich;
+     * getrennt gepflegt würden sie mit der Zeit auseinanderlaufen.
+     *
+     * @param {object}   o
+     * @param {string}   o.titel
+     * @param {string}   o.hinweis    Erklärender Satz über der Liste.
+     * @param {object[]} o.auswahl    Spieler, die zur Wahl stehen.
+     * @param {number[]} o.start      Anfangs angehakte IDs.
+     * @param {number}   [o.max]      Obergrenze; ohne Angabe unbegrenzt.
+     * @param {function} o.onSpeichern  Bekommt die gewählten IDs.
      */
-    function openMatchdaySquadModal(gameId, onSave) {
-      const alle = App.data.getPlayers();
-      if (alle.length === 0) {
-        App.ui.toast('Lege zuerst einen Kader an', 'inf');
-        return;
-      }
+    function openPlayerPicker(o) {
+      const dabei = new Set(o.start);
+      const gesamt = o.max || o.auswahl.length;
 
-      const start = App.data.hasMatchdaySquad(gameId)
-        ? App.data.getMatchdaySquad(gameId).map(p => p.id)
-        : App.data.suggestMatchdaySquad(gameId);
-      const dabei = new Set(start);
-
-      const liste = sortPlayers(alle, 'position', gameId).map(p => `
+      const liste = o.auswahl.map(p => `
         <button type="button" class="squad-pick${dabei.has(p.id) ? ' on' : ''}" data-pid="${p.id}">
           <span class="sp-num">${p.number || '–'}</span>
           <span class="sp-name">${p.name}</span>
           <span class="sp-pos">${POS_LABELS[p.position] || ''}</span>
         </button>`).join('');
 
-      App.ui.openModal('Spieltagskader', `
-        <p class="text-muted" style="font-size:12.5px;margin:-4px 0 12px">
-          Nur diese Spieler stehen beim Eintragen zur Auswahl. Gilt für dieses Spiel.
-        </p>
+      App.ui.openModal(o.titel, `
+        <p class="text-muted" style="font-size:12.5px;margin:-4px 0 12px">${o.hinweis}</p>
         <div class="squad-pick-actions">
-          <button class="btn btn-ghost btn-sm" id="sq-all" type="button">Alle</button>
+          ${o.max ? '' : `
+          <button class="btn btn-ghost btn-sm" id="sq-all" type="button">Alle</button>`}
           <button class="btn btn-ghost btn-sm" id="sq-none" type="button">Keinen</button>
           <span class="squad-count" id="sq-count"></span>
         </div>
@@ -1271,35 +1632,180 @@ App.views = (function () {
       setTimeout(() => {
         const grid  = document.getElementById('sq-grid');
         const count = document.getElementById('sq-count');
-        const zeige = () => { count.textContent = `${dabei.size} von ${alle.length}`; };
+        const zeige = () => { count.textContent = `${dabei.size} von ${gesamt}`; };
         zeige();
 
         grid.addEventListener('click', e => {
           const btn = e.target.closest('[data-pid]');
           if (!btn) return;
           const id = parseInt(btn.dataset.pid);
-          if (dabei.has(id)) dabei.delete(id); else dabei.add(id);
+          if (dabei.has(id)) {
+            dabei.delete(id);
+          } else {
+            // Bei voller Auswahl lieber ablehnen und sagen warum, als still
+            // jemanden herauszuwerfen — sonst verschwindet unbemerkt einer.
+            if (o.max && dabei.size >= o.max) {
+              App.ui.toast(`${o.titel} ist voll — nimm erst jemanden heraus`, 'inf');
+              return;
+            }
+            dabei.add(id);
+          }
           btn.classList.toggle('on', dabei.has(id));
           zeige();
         });
 
         const setzeAlle = an => {
           dabei.clear();
-          if (an) alle.forEach(p => dabei.add(p.id));
+          if (an) o.auswahl.forEach(p => dabei.add(p.id));
           grid.querySelectorAll('[data-pid]').forEach(b =>
             b.classList.toggle('on', dabei.has(parseInt(b.dataset.pid))));
           zeige();
         };
-        document.getElementById('sq-all').addEventListener('click', () => setzeAlle(true));
+        document.getElementById('sq-all')?.addEventListener('click', () => setzeAlle(true));
         document.getElementById('sq-none').addEventListener('click', () => setzeAlle(false));
 
         document.getElementById('sq-save').addEventListener('click', () => {
-          App.data.setMatchdaySquad(gameId, [...dabei]);
+          o.onSpeichern([...dabei]);
           App.ui.closeModal();
-          App.ui.toast(`Spieltagskader: ${dabei.size} Spieler`, 'ok');
-          if (onSave) onSave();
         });
       }, 0);
+    }
+
+    /**
+     * Auswahl, wer heute mitspielt. Beim ersten Öffnen ist der Kader des
+     * letzten Spiels vorgeschlagen — man hakt nur die Ausfälle ab.
+     */
+    function openMatchdaySquadModal(gameId, onSave) {
+      const alle = App.data.getPlayers();
+      if (alle.length === 0) {
+        App.ui.toast('Lege zuerst einen Kader an', 'inf');
+        return;
+      }
+
+      openPlayerPicker({
+        titel: 'Spieltagskader',
+        hinweis: 'Nur diese Spieler stehen beim Eintragen zur Auswahl. Gilt für dieses Spiel.',
+        auswahl: sortPlayers(alle, 'position', gameId),
+        start: App.data.hasMatchdaySquad(gameId)
+          ? App.data.getMatchdaySquad(gameId).map(p => p.id)
+          : App.data.suggestMatchdaySquad(gameId),
+        onSpeichern: ids => {
+          App.data.setMatchdaySquad(gameId, ids);
+          // Wer nicht mehr im Kader ist, kann auch nicht in der Start 7 stehen.
+          const drin = new Set(ids);
+          const starter = App.data.getStarters(gameId).map(p => p.id).filter(id => drin.has(id));
+          if (App.data.hasStarters(gameId)) App.data.setStarters(gameId, starter);
+          App.ui.toast(`Spieltagskader: ${ids.length} Spieler`, 'ok');
+          if (onSave) onSave();
+        },
+      });
+    }
+
+    /**
+     * Gegner-Kader vor dem Spiel anlegen. Bisher ging das nur mitten im
+     * Erfassen: erst „Tor", dann „Hinzufügen" — jede Nummer einzeln,
+     * während das Spiel läuft.
+     *
+     * Man tippt die Nummern hier in einem Rutsch ein („3 7 12 19"), so wie
+     * man sie vom Spielberichtsbogen abliest.
+     */
+    function openOpponentRosterModal(gameId, onSave) {
+      const game = App.data.getGames().find(g => g.id === gameId);
+      if (!game) return;
+
+      const vorhanden = App.data.getOpponentRoster(gameId);
+      let liste = vorhanden.length > 0 ? [...vorhanden] : App.data.suggestOpponentRoster(gameId);
+      const uebernommen = vorhanden.length === 0 && liste.length > 0;
+
+      App.ui.openModal(`Gegner-Kader — ${game.opponent}`, `
+        <p class="text-muted" style="font-size:12.5px;margin:-4px 0 12px">
+          Nummern oder Namen, durch Leerzeichen oder Komma getrennt. Sie stehen
+          dann beim Eintragen eines Gegner-Wurfs sofort bereit.
+          ${uebernommen ? '<br><strong>Aus dem letzten Spiel gegen diesen Gegner übernommen.</strong>' : ''}
+        </p>
+        <div class="opp-add-row" style="display:flex">
+          <input class="form-control" id="or-input" placeholder="z.B. 3 7 12 19" style="flex:1">
+          <button class="btn btn-primary" id="or-add" type="button">Hinzufügen</button>
+        </div>
+        <div class="or-chips" id="or-chips"></div>
+        <div class="form-actions">
+          <button class="btn btn-outline" onclick="App.ui.closeModal()">Abbrechen</button>
+          <button class="btn btn-primary" id="or-save">Übernehmen</button>
+        </div>`);
+
+      setTimeout(() => {
+        const chips = document.getElementById('or-chips');
+        const feld  = document.getElementById('or-input');
+
+        function zeichne() {
+          chips.innerHTML = liste.length === 0
+            ? '<div class="text-muted" style="padding:14px 0">Noch niemand eingetragen</div>'
+            : liste.map((n, i) => `
+                <button type="button" class="or-chip" data-idx="${i}" title="Entfernen">
+                  ${n}<span class="or-chip-x">×</span>
+                </button>`).join('');
+        }
+        zeichne();
+
+        function hinzufuegen() {
+          // Leerzeichen, Komma und Semikolon trennen — je nachdem, wie man tippt.
+          const neu = feld.value.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+          if (neu.length === 0) return;
+          neu.forEach(n => {
+            if (!liste.some(x => x.toLowerCase() === n.toLowerCase())) liste.push(n);
+          });
+          feld.value = '';
+          zeichne();
+          feld.focus();
+        }
+
+        document.getElementById('or-add').addEventListener('click', hinzufuegen);
+        feld.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); hinzufuegen(); }
+        });
+
+        chips.addEventListener('click', e => {
+          const chip = e.target.closest('.or-chip');
+          if (!chip) return;
+          liste.splice(parseInt(chip.dataset.idx), 1);
+          zeichne();
+        });
+
+        document.getElementById('or-save').addEventListener('click', () => {
+          // Noch nicht bestaetigte Eingabe nicht verlieren.
+          if (feld.value.trim()) hinzufuegen();
+          App.data.setOpponentRoster(gameId, liste);
+          App.ui.closeModal();
+          App.ui.toast(`Gegner-Kader: ${liste.length} Werfer`, 'ok');
+          if (onSave) onSave();
+        });
+
+        feld.focus();
+      }, 0);
+    }
+
+    /** Anfangsformation. Bestimmt nur die Reihenfolge, filtert nichts weg. */
+    function openStartersModal(gameId, onSave) {
+      const kader = App.data.getMatchdaySquad(gameId);
+      if (kader.length === 0) {
+        App.ui.toast('Lege zuerst einen Kader an', 'inf');
+        return;
+      }
+
+      openPlayerPicker({
+        titel: 'Start 7',
+        hinweis: 'Diese sieben stehen beim Eintragen oben. Wechsel musst du nicht mitschreiben — alle anderen bleiben darunter erreichbar.',
+        auswahl: sortPlayers(kader, 'position', gameId),
+        start: App.data.hasStarters(gameId)
+          ? App.data.getStarters(gameId).map(p => p.id)
+          : App.data.suggestStarters(gameId),
+        max: 7,
+        onSpeichern: ids => {
+          App.data.setStarters(gameId, ids);
+          App.ui.toast(ids.length ? `Start 7: ${ids.length} Spieler` : 'Start 7 zurückgesetzt', 'ok');
+          if (onSave) onSave();
+        },
+      });
     }
 
     function openAttackModal(gameId, autoMinute, presetOutcome) {
@@ -1329,7 +1835,7 @@ App.views = (function () {
         <div id="lm-below-court">
           <div class="lm-2col">
             ${players.length > 0 ? `
-            <div class="form-group">
+            <div class="lm-field">
               <div class="label-row">
                 <label>Spieler</label>
                 ${sortSwitchHTML(getPlayerSort())}
@@ -1343,8 +1849,8 @@ App.views = (function () {
               </button>` : ''}
             </div>` : ''}
             ${showZone ? `
-            <div class="form-group">
-              <label>Torzone (wohin geworfen, aus eigener Sicht)</label>
+            <div class="lm-field">
+              <label>Torzone <span class="lm-field-hint">wohin geworfen, aus eigener Sicht</span></label>
               <div class="goal-zone-grid">
                 ${GOAL_TARGET_ZONES.map(z => `<button class="gz-btn" data-zone="${z.id}">${z.label}</button>`).join('')}
               </div>

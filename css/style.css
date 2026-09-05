@@ -1592,3 +1592,195 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
   .squad-pick { padding: 11px 10px; }
   .squad-toggle { padding: 10px; font-size: 12px; }
 }
+
+/* ── Abgesetzte Felder im Wurf-Modal ────────────────────────────────
+   Spieler und Torzone sind beides Raster kleiner Knoepfe und verschwammen
+   sonst ineinander. Bewusst OHNE eigene Fuellung: die Knoepfe liegen schon
+   auf --form-sheet-alt bzw. --surface-2; ein Kasten in derselben Farbe
+   truebe nur. Getrennt wird ueber den kraeftigeren Rahmen (Kastenrahmen
+   --border-2/--form-rule-strong aussen, Haarlinien an den Knoepfen innen). */
+.lm-field {
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px 11px;
+  min-width: 0;
+}
+/* Auch das Label in der Zeile mit dem Sortier-Schalter erfassen — sonst
+   stünde links "Spieler" gemischt und rechts "TORZONE" in Versalien. */
+.lm-field > label,
+.lm-field .label-row > label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+.lm-field .label-row > label { margin-bottom: 0; }
+.lm-field-hint {
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-3);
+}
+.lm-field .label-row { margin-bottom: 8px; }
+.lm-field .goal-zone-grid { max-width: none; }
+.modal-matchform .lm-field { border-color: var(--form-rule-strong); }
+.modal-matchform .lm-field > label,
+.modal-matchform .lm-field .label-row > label { color: var(--form-ink-dim); }
+.modal-matchform .lm-field-hint { color: var(--form-ink-dim); opacity: 0.7; }
+
+/* Gruppen im Spielerraster (Start 7 / Bank) — die Zugehoerigkeit steht in
+   der Gruppe, damit kein einzelner Knopf eine Verzierung braucht. */
+.player-group-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 1px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.player-group-row::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-2);
+}
+.player-group-row:first-child { margin-top: 0; }
+.modal-matchform .player-group-row { color: var(--form-ink-dim); }
+.modal-matchform .player-group-row::after { background: var(--form-rule); }
+
+/* ── Spielbericht in der Spielanalyse ───────────────────────────────
+   Die Wurfkarte zeigt, WO geworfen wurde; dieser Block zeigt, WER und
+   WIE GUT — Endstand, Kennzahlen, Torschuetzen. */
+.game-summary { padding: 18px 20px 8px; }
+.gs-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.gs-meta { font-size: 13px; color: var(--text-2); }
+.gs-score {
+  text-align: right;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.gs-open { color: var(--text-2); }
+.gs-score-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin-top: 5px;
+}
+/* Bedeutung ueber ein gezeichnetes Icon, nicht ueber eine Randfarbe —
+   dasselbe Muster wie bei den Toasts (siehe TOAST_ICON in app.js). */
+.gs-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+.gs-hint svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--yellow);
+}
+.gs-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 10px;
+  margin: 16px 0 4px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.gs-kpi { text-align: center; }
+.gs-kpi .v {
+  display: block;
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.gs-kpi .l {
+  display: block;
+  font-size: 10px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 3px;
+}
+.gs-scorers table { font-variant-numeric: tabular-nums; }
+.gs-scorers th.num, .gs-scorers td.num { text-align: right; }
+.scorer-rank { color: var(--text-3); font-weight: 700; }
+.scorer-num {
+  display: inline-block;
+  min-width: 24px;
+  margin-right: 6px;
+  font-weight: 900;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.scorer-seven { color: var(--text-2); font-size: 11px; white-space: nowrap; }
+
+/* Spieler-Detail in der Spielanalyse */
+.card-title-hint {
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-3);
+}
+.pd-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: var(--row-hover); }
+
+/* Gegner-Kader: eingetragene Werfer als entfernbare Marken */
+.or-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  min-height: 40px;
+}
+.or-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.or-chip:hover { border-color: var(--accent); color: var(--accent); }
+.or-chip-x { color: var(--text-3); font-weight: 400; }
+.or-chip:hover .or-chip-x { color: var(--accent); }
