@@ -1741,3 +1741,20 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
   font-variant-numeric: tabular-nums;
 }
 .scorer-seven { color: var(--text-2); font-size: 11px; white-space: nowrap; }
+
+/* Spieler-Detail in der Spielanalyse */
+.card-title-hint {
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-3);
+}
+.pd-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: var(--row-hover); }
